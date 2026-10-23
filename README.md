@@ -1,120 +1,89 @@
-# AirMouse Mac
+# AirMouse
 
-Use your iPhone as a gyroscope **air mouse** or a full-screen **trackpad** for your Mac over the local Wi-Fi.
-There's no app to install: the phone opens a web page served by a small Python server on the Mac.
+Use your iPhone as a full-screen **trackpad** for your Mac over the local Wi-Fi.
+On the Mac, a small native menu bar app runs the server. The iPhone just opens a web page, so there's nothing to install on the phone.
 
 - **Local only.** There's no domain, no cloud and no internet access. Everything runs on your LAN.
-- **HTTPS + WSS on one port (8443).** iOS only gives motion sensors to secure pages, so TLS is required.
+- **HTTPS + WSS on one port (8443),** using a private root CA that lives on your Mac.
 - **Access token in the URL.** Other devices on your network can't control your Mac.
 
 ```
-iPhone Safari ──(wss://<mac-ip>:8443/ws?t=TOKEN, ~60 Hz JSON)──▶ server.py ──▶ Quartz CGEvent ──▶ cursor
+iPhone Safari ──(wss://<mac-ip>:8443/ws?t=TOKEN, ~60 Hz JSON)──▶ AirMouse.app ──▶ CGEvent ──▶ cursor
 ```
 
 ## Project structure
 
 ```
 AirMouse/
-├── server.py          # aiohttp HTTPS + WebSocket server, Quartz mouse control, QR code
-├── static/index.html  # mobile control page (vanilla JS, single file)
-├── setup.sh           # venv + dependencies + local TLS certificate
-├── requirements.txt   # aiohttp, pyobjc-framework-Quartz, qrcode
-└── certs/             # generated: cert.pem, key.pem, rootCA.pem, token.txt (keep private)
+├── macos/                    # native macOS menu bar app (Swift) — recommended
+│   ├── Sources/AirMouse/     #   server, input, certificates, menu bar, QR window, voice handoff to Haki
+│   ├── Resources/            #   Info.plist, AppIcon.icns
+│   ├── scripts/make-icon.swift
+│   └── build.sh              #   builds/signs AirMouse.app, --install copies to /Applications
+├── static/index.html         # the trackpad + voice page (shared by the app and the Python server)
+├── server.py, setup.sh, requirements.txt   # optional Python server, same protocol
+└── README.md
 ```
 
-## 1. Setup (Mac mini)
+## 1. Build and install the Mac app
 
-Requirements: macOS, Python 3.9+ (`python3`), and an iPhone on the **same Wi-Fi** as the Mac.
-
-**Recommended:** install [mkcert](https://github.com/FiloSottile/mkcert) first. It creates a local root CA, so the iPhone keeps trusting new certificates even if the Mac's IP changes later.
+Requirements: macOS 13+ and Xcode (or the Command Line Tools).
 
 ```bash
-brew install mkcert          # optional but recommended
-cd AirMouse
-chmod +x setup.sh
-./setup.sh
+cd AirMouse/macos
+./build.sh --install
 ```
 
-`setup.sh`:
-1. creates `.venv` and installs the dependencies.
-2. detects the Mac's local IP (`ipconfig getifaddr en0/en1…`).
-3. creates a certificate for that IP, `<hostname>.local` and `localhost`:
-   - **with mkcert:** runs `mkcert -install` (may ask for your Mac password), then
-     `mkcert <ip> <host>.local localhost 127.0.0.1`. It copies the CA to `certs/rootCA.pem`.
-   - **without mkcert:** makes an openssl self-signed cert (valid 825 days, the iOS maximum)
-     with the IP in the SAN. That cert is its own root, so it's also copied to `certs/rootCA.pem`.
+This compiles the app, signs it with your Apple Development certificate if you have one (otherwise ad-hoc),
+copies it to **/Applications** and launches it. On the first launch AirMouse:
+- adds a trackpad icon to the **menu bar** (no Dock icon). The icon is filled while an iPhone is connected.
+- turns on **Start at Login**. You can switch it off in the menu.
+- shows the **QR code** window.
+- asks for **Accessibility** permission (see section 2).
 
-Run `./setup.sh --force-cert` to regenerate the certificate, for example after the IP changes.
+To build without installing, run `./build.sh`; the result is in `macos/build/AirMouse.app`.
+
+### Menu
+
+| Item                                 | What it does                                              |
+|--------------------------------------|-----------------------------------------------------------|
+| status line                          | "iPhone connected" / "Waiting for iPhone — <ip>" / errors |
+| Allow Accessibility Access…          | shown only while the permission is missing                |
+| Show QR Code… / Copy Link            | the link to open on the iPhone                            |
+| Send Root Certificate via AirDrop…   | sends `rootCA.pem` to the iPhone (see section 3)          |
+| Show Root Certificate in Finder      |                                                           |
+| Start at Login                       | on by default                                             |
+| Reset Access Link                    | new token; old links and connected phones stop working   |
+| Quit AirMouse                        |                                                           |
+
+Certificates live in `~/Library/Application Support/AirMouse/`. The root CA is created once.
+The server certificate is re-issued automatically when the Mac's IP changes, so you only trust the root once on the iPhone.
 
 ## 2. Grant Accessibility permission (one time)
 
 macOS only lets apps move the cursor and click after you allow it.
 
-1. Open **System Settings → Privacy & Security → Accessibility**.
-2. Click **+** and add the app you run the server from, such as **Terminal**, **iTerm** or **Visual Studio Code**,
-   then switch it **on**. If it's already listed, switch it off and on again.
-3. Restart the server. Some apps also need to be restarted after you grant the permission.
+1. When macOS asks, click **Open System Settings**. You can also use the menu item **Allow Accessibility Access…**.
+2. In **System Settings → Privacy & Security → Accessibility**, switch **AirMouse** on.
 
-If the permission is missing, the server prints a warning when it starts and macOS shows a prompt.
+The permission stays across rebuilds as long as the app is signed with the same certificate.
+With ad-hoc signing you have to switch it off and on again after each rebuild.
 
-## 3. Run
+## 3. Trust the root certificate on the iPhone (one time)
 
-```bash
-.venv/bin/python server.py
-```
-
-The server prints a QR code and a URL like `https://192.168.1.16:8443/?t=AbC123…`.
-The token is stored in `certs/token.txt` and stays the same between restarts, so bookmarks keep working.
-
-| Option         | Meaning                                                        |
-|----------------|----------------------------------------------------------------|
-| `--port 8443`  | HTTPS/WSS port                                                 |
-| `--new-token`  | create a new access token (old links stop working)             |
-| `--light`      | print the QR code for a light-background terminal              |
-
-## 4. Trust the root certificate on the iPhone (one time)
-
-Do this before you open the page. Without it, Safari shows a warning and may block the WebSocket.
-
-1. **Send `certs/rootCA.pem` to the iPhone.**
-   - **AirDrop:** in Finder, right-click `certs/rootCA.pem` → Share → AirDrop → your iPhone.
-   - **Or** open `https://<mac-ip>:8443/cert` in **Safari** on the iPhone. Accept the one-time warning
-     (Show Details → visit this website) to download it.
-
-   The iPhone says **"Profile Downloaded"**. Tap **Allow** if Safari asks.
-2. **Install the profile.** Open **Settings → General → VPN & Device Management**.
-   (Depending on your iOS version, a **"Profile Downloaded"** item may also appear near the top of Settings.)
-   Tap the AirMouse / mkcert profile → **Install** → enter your passcode → **Install** → **Done**.
+1. **Send the certificate.** In the menu, choose **Send Root Certificate via AirDrop…** and pick your iPhone.
+   The iPhone says **"Profile Downloaded"**.
+2. **Install the profile.** On the iPhone, open **Settings → General → VPN & Device Management**.
+   Tap **AirMouse Local CA** → **Install** → enter your passcode → **Install** → **Done**.
 3. **Enable full trust.** Open **Settings → General → About → Certificate Trust Settings**. Under
-   *"Enable full trust for root certificates"*, switch on the AirMouse / mkcert certificate → **Continue**.
-4. Scan the QR code with the **Camera** app and open it in Safari. There should be no warning now.
+   *"Enable full trust for root certificates"*, switch on **AirMouse Local CA** → **Continue**.
+4. Scan the QR code from the menu with the **Camera** app and open it in Safari.
 
-Notes:
-- With **mkcert**, you only trust the root CA once. Later certificates (new IP, `--force-cert`) are trusted automatically.
-- With **openssl**, each new certificate is its own root. Repeat steps 1–3 after regenerating it,
-  and delete the old profile under VPN & Device Management.
-- The CA private key never leaves your Mac, and `/cert` only serves the public certificate.
-  Keep `certs/` private, and don't AirDrop `rootCA-key.pem` from `mkcert -CAROOT`.
+If you trusted the old Python `certs/rootCA.pem` before, you can delete that profile. The app uses its own CA.
 
-## 5. Use it
+## 4. Use it
 
-1. Open the URL from the QR code and tap **Start**, then tap **Allow** for *Motion & Orientation*.
-2. Use the tabs at the top to switch between **Air Mouse** and **Trackpad**. The phone remembers your choice.
-
-### Air Mouse tab
-Hold the phone **upright in portrait**, the way you'd hold it to read it.
-
-| Gesture                              | Action                                          |
-|--------------------------------------|-------------------------------------------------|
-| Hold a finger on the screen + move   | moves the cursor (turn left/right, tilt up/down)|
-| Lift the finger                      | cursor stops and stays, so you can re-center your hand |
-| Quick tap (< 200 ms, no movement)    | left click                                      |
-| Two quick taps                       | double click                                    |
-| Two-finger tap                       | right click                                     |
-| Two-finger drag up/down              | scroll                                          |
-
-### Trackpad tab
-The whole screen, edge to edge, works like a Magic Trackpad. It doesn't need motion permission.
+The whole screen works like a Magic Trackpad.
 
 | Gesture                                  | Action                                         |
 |------------------------------------------|------------------------------------------------|
@@ -128,55 +97,67 @@ The whole screen, edge to edge, works like a Magic Trackpad. It doesn't need mot
 | Three-finger swipe up                    | Mission Control (swipe down closes it)         |
 | Three-finger swipe down                  | App Exposé, the current app's windows (swipe up closes it) |
 
-Three-finger swipes also work in the Air Mouse tab. They send the standard macOS shortcuts
-(Ctrl+←/→, Ctrl+↑, Ctrl+↓). Those must stay enabled in **System Settings → Keyboard →
-Keyboard Shortcuts → Mission Control** ("Mission Control", "Application windows",
-"Move left/right a space"). They're on by default.
+Three-finger swipes send the standard macOS shortcuts (Ctrl+←/→, Ctrl+↑, Ctrl+↓). They must stay enabled in
+**System Settings → Keyboard → Keyboard Shortcuts → Mission Control**. They're on by default.
 
-Tip: tap **Share → Add to Home Screen** for a full-screen launcher.
+Settings (⚙︎, saved on the phone):
+- **Tracking speed**: base cursor speed. Fast swipes are accelerated on top of this.
+- **Scroll momentum**: keep scrolling after a two-finger flick.
+- **Invert scroll**.
 
-### Settings (⚙︎, saved on the phone)
-- **Sensitivity**: how many cursor pixels one degree of rotation moves (5–80).
-- **Smoothing**: low-pass filter strength. Raise it if the cursor jitters, lower it if the cursor lags.
-- **Dead zone**: ignores rotation below this speed (°/s), which removes hand tremor when you hold still.
-- **Invert horizontal / vertical**.
-- **Tracking speed** (Trackpad): base cursor speed. Fast swipes are accelerated on top of this.
-- **Scroll momentum** (Trackpad): keep scrolling after a two-finger flick.
-- **Invert scroll** (both modes).
+Tip: in Safari, tap **Share → Add to Home Screen** to get a full-screen launcher.
+
+### Voice typing (with Haki)
+
+The 🎤 tab at the top switches from the trackpad to voice. Tap anywhere to start talking, then tap again to send.
+The text is typed into whatever field is focused on the Mac.
+
+The transcription itself is done by [Haki](https://github.com/Alhamou/Haki), which must be installed in `/Applications`.
+Haki uses its own OpenAI key, model and language settings. AirMouse only passes the recording along:
+
+```
+iPhone mic ──(POST /voice?t=TOKEN)──▶ AirMouse.app ──▶ ~/Library/Caches/Haki/Inbox/airmouse-<id>.m4a
+           ──▶ open -g haki://transcribe?file=… ──▶ Haki ──▶ OpenAI ──▶ text pasted at the cursor
+```
+
+The first time, Safari asks for microphone access. Recordings are limited to 10 MB (about 10 minutes).
 
 ## Troubleshooting
-
-**"Motion access denied" / nothing happens after Start**
-- iOS remembers a denial for the session. Close Safari completely (swipe it away in the app switcher),
-  reopen the link, tap **Start** and choose **Allow**.
-- Still denied? Go to Settings → Apps → Safari → Advanced → Website Data, delete the entry for the Mac's IP, and try again.
-- The page must be opened via **https://**. Over plain http, iOS hides the motion sensors completely.
-
-**"No gyroscope data" banner**
-- Android Chrome: tap the lock/tune icon next to the address → Site settings → **Motion sensors → Allow**.
-- In Chrome, accept the certificate warning with **Advanced → Proceed**, or install `rootCA.pem` under
-  Settings → Security → Encryption & credentials → Install a certificate → CA certificate.
 
 **Page doesn't load / "Connecting…" never turns green**
 - Both devices must be on the **same Wi-Fi**. Guest networks and "client/AP isolation" block device-to-device traffic.
 - Turn off **iCloud Private Relay** and any **VPN** on the iPhone for this network, if they get in the way.
-- Check that the IP in the QR code matches `ipconfig getifaddr en0` (or `en1`). If the IP changed, run
-  `./setup.sh --force-cert`. To keep the IP stable, set a DHCP reservation for the Mac mini in your router.
-- **Firewall:** System Settings → Network → Firewall → Options. Allow incoming connections for
-  `python3` (or click **Allow** when macOS asks), and make sure "Block all incoming connections" is off.
+- The IP in the menu's status line must match the QR code. After a network change, use **Show QR Code…** to get the new link.
+  To keep the IP stable, set a DHCP reservation for the Mac in your router.
+- **Firewall:** System Settings → Network → Firewall → Options. Allow incoming connections for **AirMouse**.
 - **403 Forbidden** means the token is wrong or missing. Rescan the QR code.
-- **Certificate warning still appears** means step 3 of section 4 (full trust) wasn't done, or the certificate
-  was regenerated (openssl mode).
+- **Certificate warning** means section 3, step 3 (full trust) wasn't done.
+- **"Port 8443 is already in use"** in the menu means the Python server is probably still running. Stop it, then choose **Restart Server**.
 
-**Cursor doesn't move but the status says Connected**
-- Accessibility permission is missing for the app running the server (see section 2), or you didn't restart the server after granting it.
+**Cursor doesn't move but the phone says Connected**
+- Accessibility permission is missing (see section 2). The menu shows **⚠︎ Allow Accessibility Access…** in this case.
+
+**Voice tab shows "Could not send: Haki is not installed on this Mac."**
+- Install Haki in `/Applications` and open it once, so macOS registers its `haki://` URL scheme.
+
+**Voice clip is sent but no text appears**
+- Haki must be running, with an API key saved and Accessibility permission granted. Check its menu bar icon.
 
 **Three-finger swipe does nothing**
 - Check that the Mission Control shortcuts above are enabled. To switch desktops you need at least two
   (Mission Control → **+** at the top right).
 
-**Left/right feels reversed or the axes are mixed up**
-- Hold the phone upright in portrait. If a direction still feels wrong, use **Invert horizontal / vertical** in settings.
+## Optional: Python server
+
+`server.py` serves the same page and protocol without the app. It's useful for development:
+
+```bash
+./setup.sh                    # venv, dependencies, certificate in certs/
+.venv/bin/python server.py    # prints a QR code; grant Accessibility to your terminal app
+```
+
+Don't run it at the same time as the app, because both use port 8443.
+The Python server has no voice support (`POST /voice`); use the app for that.
 
 ## Protocol
 
@@ -190,8 +171,12 @@ One JSON object per WebSocket text message (phone → Mac):
 {"t":"g","d":"l"}            // three-finger swipe: d = "l" | "r" | "u" | "d"
 ```
 
+Voice clips are a separate HTTPS request: `POST /voice?t=TOKEN` with the recording as the body
+(`Content-Type: audio/mp4`, `audio/webm`, …). The answer is `200 OK` once the clip is handed to Haki,
+`403` for a bad token, `413` if it's over 10 MB and `503` if Haki isn't installed.
+
 ## Security notes
 - The server listens on your LAN only. Don't forward port 8443 on your router.
-- Every page and WebSocket request needs the token, and the server checks it in constant time.
-  Run `--new-token` to revoke old links.
-- `certs/` holds your private key and token. Don't share or commit it.
+- Every page and WebSocket request needs the token, which is compared in constant time.
+  **Reset Access Link** revokes old links.
+- The root CA's private key (`rootCA-key.pem`) never leaves your Mac, and `/cert` only serves the public certificate.

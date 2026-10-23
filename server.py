@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""AirMouse Mac — use an iPhone as a gyroscope air mouse for macOS.
+"""AirMouse (Python server) — use an iPhone as a trackpad for macOS.
 
 Serves the mobile control page over HTTPS and receives compact JSON messages
 over a WebSocket, which are turned into Quartz (CoreGraphics) mouse/keyboard events.

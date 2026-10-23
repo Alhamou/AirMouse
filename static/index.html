@@ -35,60 +35,63 @@
   #dot { width: 10px; height: 10px; flex: none; border-radius: 50%; background: var(--bad); transition: background .2s; }
   #dot.ok { background: var(--ok); }
   #gear { font-size: 22px; padding: 4px 8px; color: var(--dim); }
+  #status, #gear { flex: 1 1 0; }
+  #gear { text-align: right; }
 
-  /* Mode tabs (segmented control) */
-  #tabs { display: flex; padding: 3px; border-radius: 10px; background: rgba(255, 255, 255, .07); }
-  #tabs button { padding: 6px 12px; border-radius: 8px; font-size: 14px; color: var(--dim); transition: background .15s, color .15s; }
-  #tabs button.on { background: rgba(255, 255, 255, .16); color: var(--text); }
+  /* Trackpad / Voice switch */
+  #tabs { display: flex; flex: none; padding: 3px; border-radius: 12px; background: rgba(42, 42, 53, .8); }
+  #tabs button { padding: 6px 16px; border-radius: 9px; font-size: 18px; line-height: 1; opacity: .55; transition: background .15s, opacity .15s; }
+  #tabs button.on { background: var(--panel); opacity: 1; }
+
+  /* Voice: tap anywhere to start / stop talking */
+  #voice {
+    position: fixed; inset: 0; z-index: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+    text-align: center; color: var(--dim); touch-action: manipulation; padding: 0 24px;
+    background: radial-gradient(120% 90% at 50% 40%, #1e1e25 0%, #141418 60%, #0f0f12 100%);
+  }
+  #voice * { pointer-events: none; }
+  #mic {
+    width: 132px; height: 132px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 56px; background: var(--line); transition: background .2s, transform .2s;
+  }
+  #voice.recording #mic { background: var(--bad); animation: pulse 1.2s ease-in-out infinite; }
+  #voice.sending #mic { background: var(--accent); opacity: .7; }
+  #voice.done #mic { background: var(--ok); }
+  @keyframes pulse { 50% { transform: scale(1.08); box-shadow: 0 0 0 18px rgba(255, 95, 86, .15); } }
+  #voiceTitle { margin: 0; font-size: 22px; font-weight: 600; color: var(--text); }
+  #voiceHint { margin: 0; font-size: 14px; min-height: 1.4em; }
 
   #warn { margin: 0 12px 8px; padding: 10px 14px; border-radius: 12px; background: #3a1d1d; color: #ffb4b0; font-size: 14px; }
 
-  /* Touch surface — Air Mouse: framed card */
+  /* Touch surface: 100% of the screen, edge to edge, like a Magic Trackpad */
   #pad {
-    flex: 1; margin: 0 12px 12px; border: 1px solid var(--line); border-radius: 28px;
+    position: fixed; inset: 0; z-index: 0;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     text-align: center; color: var(--dim); touch-action: none;
-    transition: background .12s, border-color .12s;
+    background: radial-gradient(120% 90% at 50% 40%, #1e1e25 0%, #141418 60%, #0f0f12 100%);
+    transition: background .12s;
   }
-  #pad.active { background: #121a2e; border-color: var(--accent); }
-  #pad.click  { background: #1d2b4d; }
+  #pad.active { background: radial-gradient(120% 90% at 50% 40%, #23232b 0%, #17171c 60%, #111115 100%); }
+  #pad.click  { background: #26262e; }
   #pad h1 { margin: 0 0 14px; font-size: 22px; font-weight: 600; color: var(--text); }
   #pad p  { margin: 4px 0; font-size: 14px; }
+  #pad h1, #pad p { opacity: .45; transition: opacity .3s; }
+  #pad.active h1, #pad.active p { opacity: 0; }
   #pad * { pointer-events: none; }
 
-  /* Touch surface — Trackpad: 100% of the screen, edge to edge, like a Magic Trackpad */
-  body.trackpad #pad {
-    position: fixed; inset: 0; z-index: 0; margin: 0; border: 0; border-radius: 0;
-    background: radial-gradient(120% 90% at 50% 40%, #1e1e25 0%, #141418 60%, #0f0f12 100%);
-  }
-  body.trackpad #pad.active { background: radial-gradient(120% 90% at 50% 40%, #23232b 0%, #17171c 60%, #111115 100%); }
-  body.trackpad #pad.click  { background: #26262e; }
-  body.trackpad #pad h1, body.trackpad #pad p { opacity: .45; }
-  body.trackpad #pad.active h1, body.trackpad #pad.active p { opacity: 0; transition: opacity .3s; }
-  .hint-pad, body.trackpad .hint-air { display: none; }
-  body.trackpad .hint-pad { display: block; }
-
   .overlay {
-    position: fixed; inset: 0; z-index: 10; background: rgba(11, 11, 15, .97);
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    padding: 24px; text-align: center;
+    position: fixed; inset: 0; z-index: 10;
+    display: flex; flex-direction: column; align-items: center;
   }
   .hidden { display: none !important; }
-  #start {
-    width: 180px; height: 180px; border-radius: 50%; background: var(--accent);
-    color: #fff; font-size: 28px; font-weight: 600; box-shadow: 0 10px 40px rgba(79, 140, 255, .35);
-  }
-  #start:active { transform: scale(.97); }
-  #intro { color: var(--dim); font-size: 14px; margin-top: 28px; max-width: 300px; }
-  #err { color: var(--bad); font-size: 14px; margin-top: 16px; max-width: 320px; min-height: 1.4em; }
 
-  #sheet { justify-content: flex-end; padding: 0; background: rgba(0, 0, 0, .6); }
+  #sheet { justify-content: flex-end; background: rgba(0, 0, 0, .6); }
   .panel {
-    width: 100%; max-width: 520px; max-height: 90%; overflow-y: auto; background: var(--panel); text-align: left;
+    width: 100%; max-width: 520px; max-height: 90%; overflow-y: auto; background: var(--panel);
     border-radius: 22px 22px 0 0; padding: 20px 22px calc(20px + env(safe-area-inset-bottom));
   }
   .panel h2 { margin: 0 0 16px; font-size: 18px; }
-  .panel h3 { margin: 6px 0 12px; font-size: 13px; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: .04em; }
   .field { display: block; margin-bottom: 18px; font-size: 15px; }
   .field span { float: right; color: var(--dim); font-variant-numeric: tabular-nums; }
   .field input[type=range] { width: 100%; margin-top: 8px; accent-color: var(--accent); }
@@ -103,58 +106,37 @@
 <body>
 
 <header>
-  <div id="status"><div id="dot"></div><span id="statusText">Offline</span></div>
-  <nav id="tabs">
-    <button data-input="air">Air Mouse</button>
-    <button data-input="pad">Trackpad</button>
-  </nav>
+  <div id="status"><div id="dot"></div><span id="statusText">Connecting…</span></div>
+  <div id="tabs" role="tablist">
+    <button id="tabPad" class="on" role="tab" aria-label="Trackpad">🖱️</button>
+    <button id="tabVoice" role="tab" aria-label="Voice">🎤</button>
+  </div>
   <button id="gear" aria-label="Settings">⚙︎</button>
 </header>
 
 <div id="warn" class="hidden"></div>
 
 <div id="pad">
-  <div class="hint-air">
-    <h1>Hold to move</h1>
-    <p>Tap = click · Double tap = double click</p>
-    <p>Two-finger tap = right click</p>
-    <p>Two-finger drag = scroll</p>
-    <p>Three-finger swipe = desktops / Mission Control</p>
-  </div>
-  <div class="hint-pad">
-    <h1>Trackpad</h1>
-    <p>Slide one finger to move</p>
-    <p>Tap = click · Tap, then touch &amp; slide = drag</p>
-    <p>Two fingers = scroll · Two-finger tap = right click</p>
-    <p>Three fingers ← → = desktops · ↑ Mission Control · ↓ App windows</p>
-  </div>
+  <h1>Trackpad</h1>
+  <p>Slide one finger to move</p>
+  <p>Tap = click · Tap, then touch &amp; slide = drag</p>
+  <p>Two fingers = scroll · Two-finger tap = right click</p>
+  <p>Three fingers ← → = desktops · ↑ Mission Control · ↓ App windows</p>
 </div>
 
-<!-- Start screen: iOS only grants motion access from a user gesture -->
-<div id="startScreen" class="overlay">
-  <button id="start">Start</button>
-  <div id="intro">Air Mouse: hold the phone upright and keep a finger on the screen while you point.<br>Trackpad: use the whole screen like a Magic Trackpad.</div>
-  <div id="err"></div>
+<div id="voice" class="hidden">
+  <div id="mic">🎤</div>
+  <h1 id="voiceTitle">Tap to talk</h1>
+  <p id="voiceHint">Speak, then tap again. Haki types the text on your Mac.</p>
 </div>
 
 <!-- Settings sheet -->
 <div id="sheet" class="overlay hidden">
   <div class="panel">
     <h2>Settings</h2>
-    <h3>Air Mouse</h3>
-    <label class="field">Sensitivity <span id="v-sens"></span>
-      <input type="range" id="sens" min="5" max="80" step="1"></label>
-    <label class="field">Smoothing <span id="v-smooth"></span>
-      <input type="range" id="smooth" min="0" max="0.9" step="0.05"></label>
-    <label class="field">Dead zone <span id="v-dead"></span>
-      <input type="range" id="dead" min="0" max="10" step="0.5"></label>
-    <label class="check"><input type="checkbox" id="invX"> Invert horizontal</label>
-    <label class="check"><input type="checkbox" id="invY"> Invert vertical</label>
-    <h3>Trackpad</h3>
     <label class="field">Tracking speed <span id="v-padSpeed"></span>
       <input type="range" id="padSpeed" min="0.5" max="4" step="0.1"></label>
     <label class="check"><input type="checkbox" id="momentum"> Scroll momentum</label>
-    <h3>Both</h3>
     <label class="check"><input type="checkbox" id="invScroll"> Invert scroll</label>
     <div class="actions">
       <button id="reset" class="btn">Reset</button>
@@ -170,18 +152,16 @@
 
   // ---------------------------------------------------------------- settings
   const DEFAULTS = {
-    input: 'air',     // 'air' (gyroscope) | 'pad' (full-screen trackpad)
-    sens: 25,         // air: cursor pixels per degree of rotation
-    smooth: 0.4,      // air: low-pass filter strength (0 = off, 0.9 = very smooth)
-    dead: 1.5,        // air: dead zone in deg/s (removes hand tremor)
-    invX: false, invY: false,
-    padSpeed: 1.5,    // trackpad: base cursor px per finger px (before acceleration)
-    momentum: true,   // trackpad: keep scrolling after a two-finger flick
+    padSpeed: 1.5,    // base cursor px per finger px (before acceleration)
+    momentum: true,   // keep scrolling after a two-finger flick
     invScroll: false,
   };
   const STORE_KEY = 'airmouse.settings';
   let S = { ...DEFAULTS };
-  try { Object.assign(S, JSON.parse(localStorage.getItem(STORE_KEY) || '{}')); } catch {}
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
+    for (const k of Object.keys(DEFAULTS)) if (k in saved) S[k] = saved[k];
+  } catch {}
   const save = () => localStorage.setItem(STORE_KEY, JSON.stringify(S));
 
   // ---------------------------------------------------------------- tuning
@@ -190,10 +170,9 @@
   const TAP_MOVE_PX = 10;      // max finger travel for a tap
   const DOUBLE_TAP_MS = 350;   // max gap between taps of a double tap (and tap-and-drag)
   const DOUBLE_TAP_PX = 40;
-  const GUARD_PX = 25;         // air mouse: cursor travel that ends the tap guard early
-  const SLOP_PX = 8;           // trackpad: finger travel ignored before pointing starts
+  const SLOP_PX = 8;           // finger travel ignored before pointing starts
   const SCROLL_GAIN = 1.5;     // finger px -> scroll px
-  const PAD_ACCEL = 1.5;       // trackpad pointer acceleration (gain grows with finger speed)
+  const PAD_ACCEL = 1.5;       // pointer acceleration (gain grows with finger speed)
   const FRICTION = 0.94;       // scroll momentum decay per frame
   const SWIPE_PX = 50;         // three-finger travel that triggers a desktop swipe
 
@@ -226,90 +205,25 @@
     $('statusText').textContent = ok ? 'Connected' : 'Connecting…';
   }
 
-  // ---------------------------------------------------------------- input mode tabs
-  let motionOk = true;  // motion permission granted (only matters for Air Mouse)
-
-  function setInput(input) {
-    S.input = input;
-    save();
-    document.body.classList.toggle('trackpad', input === 'pad');
-    for (const b of $('tabs').children) b.classList.toggle('on', b.dataset.input === input);
-    endGesture();
-    warn(input === 'air' && !motionOk
-      ? 'Motion access denied — Air Mouse needs it. Close Safari completely, reopen and tap Allow. Trackpad still works.'
-      : '');
-  }
-  $('tabs').addEventListener('click', (e) => { if (e.target.dataset.input) setInput(e.target.dataset.input); });
-
-  // ---------------------------------------------------------------- shared gesture state
+  // ---------------------------------------------------------------- gesture state
   let touching = false;        // a finger is on the pad
   let mode = 'move';           // 'move' (1 finger) | 'scroll' (2 fingers) | 'swipe' (3 fingers)
   let accX = 0, accY = 0;      // pending cursor movement (px, fractional)
   let accSX = 0, accSY = 0;    // pending scroll (px)
   let mvx = 0, mvy = 0;        // scroll momentum (px per frame)
-  let guard = false;           // air mouse tap guard: motion held back until we know it's not a tap
-  let panning = false;         // trackpad: finger has moved past the touch slop
-  let speed = 0;               // trackpad: smoothed finger speed (px/ms) for acceleration
+  let panning = false;         // finger has moved past the touch slop
+  let speed = 0;               // smoothed finger speed (px/ms) for acceleration
   let downT = 0;
-  let dragArmed = false;       // trackpad: touch began right after a tap -> may become a drag
+  let dragArmed = false;       // touch began right after a tap -> may become a drag
   let dragging = false;        // left button is held on the Mac
-
-  // ---------------------------------------------------------------- air mouse (gyroscope)
-  let gy = 9.8, gz = 0;        // low-passed gravity in device coordinates
-  let fx = 0, fy = 0;          // smoothed angular rates (deg/s)
-  let lastT = 0, gotMotion = false;
-
-  // Soft dead zone: rates below the threshold become 0, above it they grow from 0 (no jump).
-  const deadZone = (v) => Math.sign(v) * Math.max(0, Math.abs(v) - S.dead);
-
-  function onMotion(e) {
-    const r = e.rotationRate;
-    if (!r || r.alpha == null) return;
-    gotMotion = true;
-
-    const now = performance.now();
-    const dt = lastT ? Math.min((now - lastT) / 1000, 0.1) : 0;
-    lastT = now;
-
-    // Track gravity (slow low-pass) so we know how the phone is tilted.
-    const g = e.accelerationIncludingGravity;
-    if (g && g.y != null) { gy += 0.1 * (g.y - gy); gz += 0.1 * (g.z - gz); }
-
-    if (!touching || mode !== 'move' || S.input !== 'air') return;
-
-    // Device axes: x = right, y = up along the screen, z = out of the screen.
-    // Yaw (turning left/right) is rotation around the world's vertical axis:
-    //   phone upright -> device y (gamma); phone flat -> device z (alpha).
-    // Blending by the gravity direction keeps left/right correct at any forward tilt.
-    // Absolute values make this independent of platform sign conventions for gravity.
-    const n = Math.hypot(gy, gz) || 1;
-    const yaw = (r.gamma * Math.abs(gy) + r.alpha * Math.abs(gz)) / n;
-    const pitch = r.beta;  // tilting up/down is rotation around device x in both poses
-
-    // Positive yaw = turning left, positive pitch = aiming up; screen y grows downward.
-    const vx = -yaw * (S.invX ? -1 : 1);
-    const vy = -pitch * (S.invY ? -1 : 1);
-
-    // Low-pass filter (exponential moving average), then dead zone.
-    const k = 1 - S.smooth;
-    fx += k * (vx - fx);
-    fy += k * (vy - fy);
-    accX += deadZone(fx) * dt * S.sens;
-    accY += deadZone(fy) * dt * S.sens;
-  }
 
   // ---------------------------------------------------------------- send loop
   setInterval(() => {
     if (!isOpen()) { accX = accY = accSX = accSY = mvx = mvy = 0; return; }  // no jump after reconnect
 
     if (touching && mode === 'move') {
-      if (S.input === 'air') {
-        // Hold motion back briefly so the tiny jolt of a tap doesn't move the cursor
-        // before the click. Released as soon as the touch is clearly not a tap.
-        if (guard && performance.now() - downT < TAP_MS && Math.hypot(accX, accY) < GUARD_PX) return;
-        guard = false;
-      } else if (dragArmed && (panning || performance.now() - downT >= TAP_MS)) {
-        // Trackpad tap-and-drag: the second touch moved or is held, so press the button.
+      if (dragArmed && (panning || performance.now() - downT >= TAP_MS)) {
+        // Tap-and-drag: the second touch moved or is held, so press the button.
         dragArmed = false;
         dragging = send({ t: 'd', s: 1 });
       }
@@ -329,7 +243,7 @@
 
   // ---------------------------------------------------------------- touch
   let startX = 0, startY = 0, moved = 0, maxTouches = 0;
-  let lastX = 0, lastY = 0, lastMoveT = 0;              // trackpad: previous finger position
+  let lastX = 0, lastY = 0, lastMoveT = 0;              // previous finger position
   let lastSX = 0, lastSY = 0, svx = 0, svy = 0;          // scroll centroid and velocity (px/ms)
   let swipeX = 0, swipeY = 0, swiped = false;            // three-finger swipe origin
   let lastTap = { t: 0, x: 0, y: 0 };
@@ -343,14 +257,15 @@
 
   pad.addEventListener('touchstart', (e) => {
     e.preventDefault();
+    keepAwake();
     const ts = e.touches, now = performance.now();
     if (!touching) {  // first finger down: begin a new gesture
-      touching = true; mode = 'move'; guard = S.input === 'air'; panning = false; speed = 0;
+      touching = true; mode = 'move'; panning = false; speed = 0;
       downT = lastMoveT = now;
       startX = lastX = ts[0].clientX; startY = lastY = ts[0].clientY;
       moved = 0; maxTouches = 0; swiped = false;
-      fx = fy = accX = accY = mvx = mvy = 0;  // a new touch also stops scroll momentum
-      dragArmed = S.input === 'pad' && now - lastTap.t < DOUBLE_TAP_MS
+      accX = accY = mvx = mvy = 0;  // a new touch also stops scroll momentum
+      dragArmed = now - lastTap.t < DOUBLE_TAP_MS
         && Math.hypot(startX - lastTap.x, startY - lastTap.y) < DOUBLE_TAP_PX;
       pad.classList.add('active');
     }
@@ -402,25 +317,23 @@
 
     const t = ts[0];
     moved = Math.max(moved, Math.hypot(t.clientX - startX, t.clientY - startY));
-    if (S.input === 'pad') {
-      if (!panning) {
-        // Ignore the first few px (taps wobble slightly), then start pointing from
-        // the current spot so the slop distance never shows up as a cursor jump.
-        if (moved < SLOP_PX) return;
-        panning = true;
-        lastX = t.clientX; lastY = t.clientY;
-        return;
-      }
-      // Relative pointing with acceleration: slow = precise, fast = covers the screen.
-      const dx = t.clientX - lastX, dy = t.clientY - lastY;
+    if (!panning) {
+      // Ignore the first few px (taps wobble slightly), then start pointing from
+      // the current spot so the slop distance never shows up as a cursor jump.
+      if (moved < SLOP_PX) return;
+      panning = true;
       lastX = t.clientX; lastY = t.clientY;
-      // Smoothed speed with a minimum time step: iOS sometimes delivers two events a
-      // millisecond apart, which would otherwise spike the acceleration.
-      speed = 0.7 * speed + 0.3 * (Math.hypot(dx, dy) / Math.max(dt, 8));
-      const gain = S.padSpeed * (1 + PAD_ACCEL * Math.min(speed, 3));
-      accX += dx * gain;
-      accY += dy * gain;
+      return;
     }
+    // Relative pointing with acceleration: slow = precise, fast = covers the screen.
+    const dx = t.clientX - lastX, dy = t.clientY - lastY;
+    lastX = t.clientX; lastY = t.clientY;
+    // Smoothed speed with a minimum time step: iOS sometimes delivers two events a
+    // millisecond apart, which would otherwise spike the acceleration.
+    speed = 0.7 * speed + 0.3 * (Math.hypot(dx, dy) / Math.max(dt, 8));
+    const gain = S.padSpeed * (1 + PAD_ACCEL * Math.min(speed, 3));
+    accX += dx * gain;
+    accY += dy * gain;
   }, { passive: false });
 
   function onTouchEnd(e) {
@@ -431,10 +344,9 @@
       else if (e.touches.length === 2) [lastSX, lastSY] = centroid(e.touches);
       return;
     }
-    const still = S.input === 'air' ? guard : !panning;  // no cursor movement happened yet
-    const wasTap = mode === 'move' && still && performance.now() - downT < TAP_MS && moved < TAP_MOVE_PX;
-    const wasTwoFingerTap = mode === 'scroll' && maxTouches === 2
-      && performance.now() - downT < TAP_MS * 1.5 && moved < TAP_MOVE_PX;
+    const dur = performance.now() - downT;
+    const wasTap = mode === 'move' && !panning && dur < TAP_MS && moved < TAP_MOVE_PX;
+    const wasTwoFingerTap = mode === 'scroll' && maxTouches === 2 && dur < TAP_MS * 1.5 && moved < TAP_MOVE_PX;
     const flick = mode === 'scroll' && performance.now() - lastMoveT < 80;  // fingers still moving at lift
 
     // All fingers lifted: stop pointing immediately; the cursor stays where it is.
@@ -446,7 +358,7 @@
     } else if (wasTwoFingerTap) {
       send({ t: 'c', b: 'r', n: 1 });
       flash();
-    } else if (flick && S.input === 'pad' && S.momentum && Math.hypot(svx, svy) > 0.3) {
+    } else if (flick && S.momentum && Math.hypot(svx, svy) > 0.3) {
       mvx = svx * SEND_MS; mvy = svy * SEND_MS;  // px/ms -> px per frame
     }
   }
@@ -481,54 +393,134 @@
     if (navigator.vibrate) navigator.vibrate(8);  // Android only; iOS ignores it
   }
 
-  // ---------------------------------------------------------------- start
-  let wakeLock = null, started = false;
+  // ---------------------------------------------------------------- screen wake lock
+  let wakeLock = null;
 
+  // Keep the phone screen on while in use (requested on touch: iOS wants a user gesture).
   async function keepAwake() {
+    if (wakeLock && !wakeLock.released) return;
     try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
   }
 
-  function warn(text) {
-    $('warn').textContent = text;
-    $('warn').classList.toggle('hidden', !text);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') endGesture();  // never leave a held button stuck
+  });
+
+  if (!window.isSecureContext) {
+    $('warn').textContent = 'This page needs HTTPS. Open the https:// link from the QR code.';
+    $('warn').classList.remove('hidden');
   }
 
-  $('start').addEventListener('click', async () => {
-    const err = $('err');
-    err.textContent = '';
-    if (!window.isSecureContext) {
-      err.textContent = 'This page needs HTTPS. Open the https:// link from the QR code.';
-      return;
-    }
-    // iOS 13+: motion permission must be requested from a user gesture.
-    // Trackpad mode works without it, so a denial only affects Air Mouse.
-    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-      try { motionOk = await DeviceMotionEvent.requestPermission() === 'granted'; }
-      catch { motionOk = false; }
-    }
-    if (motionOk) window.addEventListener('devicemotion', onMotion);
-    started = true;
-    connect();
+  // ---------------------------------------------------------------- voice (Haki)
+  // Tap to record with the phone's microphone, tap again to send. The Mac app hands the
+  // clip to Haki, which transcribes it and types the text into the focused field.
+  const voice = $('voice');
+  const MIN_CLIP_MS = 400;          // shorter taps are treated as accidental
+  const MAX_CLIP_MS = 2 * 60000;    // stop automatically after two minutes
+  let micStream = null, recorder = null, chunks = [], recStart = 0, recTimer = 0, voiceBusy = false;
+  let voiceTick = 0, resetTimer = 0;
+
+  function voiceState(state, title, hint = '') {
+    voice.className = state;
+    $('voiceTitle').textContent = title;
+    $('voiceHint').textContent = hint;
+  }
+  const voiceIdle = () => voiceState('', 'Tap to talk', 'Speak, then tap again. Haki types the text on your Mac.');
+
+  function showTab(name) {
+    const isVoice = name === 'voice';
+    $('tabPad').classList.toggle('on', !isVoice);
+    $('tabVoice').classList.toggle('on', isVoice);
+    pad.classList.toggle('hidden', isVoice);
+    voice.classList.toggle('hidden', !isVoice);
+    endGesture();
+    if (!isVoice) { stopRecording(false); releaseMic(); }
+    try { localStorage.setItem('airmouse.tab', name); } catch {}
+  }
+  $('tabPad').addEventListener('click', () => showTab('pad'));
+  $('tabVoice').addEventListener('click', () => showTab('voice'));
+
+  voice.addEventListener('click', () => {
     keepAwake();
-    $('startScreen').classList.add('hidden');
-    setInput(S.input);
-    setTimeout(() => {
-      if (motionOk && !gotMotion && S.input === 'air') {
-        warn('No gyroscope data. Check motion permissions for this site (see README → Troubleshooting).');
-      }
-    }, 1500);
+    if (recorder && recorder.state === 'recording') stopRecording(true);
+    else if (!voiceBusy) startRecording();
   });
+
+  async function startRecording() {
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      return voiceState('', 'Not supported', 'This browser cannot record audio. Update iOS or use Safari.');
+    }
+    voiceBusy = true;
+    clearTimeout(resetTimer);
+    try {
+      if (!micStream) micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      voiceBusy = false;
+      return voiceState('', 'No microphone access', 'Allow the microphone for this page in Safari, then tap again.');
+    }
+    const type = ['audio/mp4', 'audio/webm'].find((t) => MediaRecorder.isTypeSupported(t));
+    recorder = new MediaRecorder(micStream, type ? { mimeType: type } : undefined);
+    chunks = [];
+    recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    recorder.start();
+    recStart = performance.now();
+    recTimer = setTimeout(() => stopRecording(true), MAX_CLIP_MS);
+    const tick = () => {
+      const s = Math.floor((performance.now() - recStart) / 1000);
+      voiceState('recording', `Listening… ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`, 'Tap to finish');
+    };
+    tick();
+    voiceTick = setInterval(tick, 500);
+    voiceBusy = false;
+  }
+
+  // send=false discards the clip (tab switch, page hidden).
+  function stopRecording(send) {
+    clearTimeout(recTimer);
+    clearInterval(voiceTick);
+    if (!recorder || recorder.state !== 'recording') return;
+    const rec = recorder, tooShort = performance.now() - recStart < MIN_CLIP_MS;
+    recorder = null;
+    rec.onstop = () => {
+      if (!send) return;
+      if (tooShort) return voiceIdle();
+      uploadClip(new Blob(chunks, { type: rec.mimeType || 'audio/mp4' }));
+    };
+    rec.stop();
+    if (!send) voiceIdle();
+  }
+
+  async function uploadClip(blob) {
+    voiceBusy = true;
+    voiceState('sending', 'Sending…');
+    try {
+      const res = await fetch(`/voice?t=${encodeURIComponent(token)}`, {
+        method: 'POST', headers: { 'Content-Type': blob.type }, body: blob,
+      });
+      if (!res.ok) throw new Error((await res.text()).trim() || `Error ${res.status}`);
+      voiceState('done', 'Sent ✓', 'Haki is typing the text on your Mac.');
+      resetTimer = setTimeout(voiceIdle, 2500);
+    } catch (err) {
+      voiceState('', 'Could not send', err.message || 'Check the connection and try again.');
+    }
+    voiceBusy = false;
+  }
+
+  // Turn the mic off when it isn't needed, so iOS drops the recording indicator.
+  function releaseMic() {
+    micStream?.getTracks().forEach((t) => t.stop());
+    micStream = null;
+  }
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') { if (started) keepAwake(); }
-    else endGesture();  // never leave a gesture (or a held button) stuck
+    if (document.visibilityState !== 'visible') { stopRecording(false); releaseMic(); }
   });
 
+  try { if (localStorage.getItem('airmouse.tab') === 'voice') showTab('voice'); } catch {}
+
   // ---------------------------------------------------------------- settings UI
-  const RANGE_FMT = {
-    sens: (v) => v, smooth: (v) => Math.round(v * 100) + '%', dead: (v) => v + '°/s', padSpeed: (v) => v.toFixed(1) + '×',
-  };
-  const FIELDS = ['sens', 'smooth', 'dead', 'invX', 'invY', 'padSpeed', 'momentum', 'invScroll'];
+  const RANGE_FMT = { padSpeed: (v) => v.toFixed(1) + '×' };
+  const FIELDS = Object.keys(DEFAULTS);
 
   function renderSettings() {
     for (const k of FIELDS) {
@@ -550,9 +542,9 @@
   $('gear').addEventListener('click', () => { renderSettings(); $('sheet').classList.remove('hidden'); });
   $('done').addEventListener('click', () => $('sheet').classList.add('hidden'));
   $('sheet').addEventListener('click', (e) => { if (e.target.id === 'sheet') $('sheet').classList.add('hidden'); });
-  $('reset').addEventListener('click', () => { S = { ...DEFAULTS, input: S.input }; save(); renderSettings(); });
+  $('reset').addEventListener('click', () => { S = { ...DEFAULTS }; save(); renderSettings(); });
 
-  setInput(S.input);  // apply the saved mode (layout) before Start
+  connect();
 })();
 </script>
 </body>
