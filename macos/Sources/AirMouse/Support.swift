@@ -27,6 +27,16 @@ enum Preferences {
         return token
     }
 
+    /// LG webOS TV that the phone's TV tab controls.
+    static var tvHost: String {
+        get { defaults.string(forKey: "tvHost") ?? "192.168.1.51" }
+        set { defaults.set(newValue, forKey: "tvHost") }
+    }
+
+    /// Key the TV issues when AirMouse is accepted, so it doesn't ask again. One per TV address.
+    static func tvClientKey(host: String) -> String? { defaults.string(forKey: "tvClientKey." + host) }
+    static func setTVClientKey(_ key: String?, host: String) { defaults.set(key, forKey: "tvClientKey." + host) }
+
     /// True only the very first time the app runs.
     static func isFirstLaunch() -> Bool {
         guard !defaults.bool(forKey: "launchedBefore") else { return false }

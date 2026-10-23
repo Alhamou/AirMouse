@@ -38,7 +38,7 @@
   #status, #gear { flex: 1 1 0; }
   #gear { text-align: right; }
 
-  /* Trackpad / Voice switch */
+  /* Trackpad / TV / Voice switch */
   #tabs { display: flex; flex: none; padding: 3px; border-radius: 12px; background: rgba(42, 42, 53, .8); }
   #tabs button { padding: 6px 16px; border-radius: 9px; font-size: 18px; line-height: 1; opacity: .55; transition: background .15s, opacity .15s; }
   #tabs button.on { background: var(--panel); opacity: 1; }
@@ -80,6 +80,20 @@
   #pad h1, #pad p { opacity: .45; transition: opacity .3s; }
   #pad.active h1, #pad.active p { opacity: 0; }
   #pad * { pointer-events: none; }
+  #pad .tvOnly { display: none; }
+  #pad.tv .tvOnly { display: block; }
+  #pad.tv .macOnly { display: none; }
+
+  /* TV remote keys, floating at the bottom of the pad */
+  #keys {
+    position: fixed; z-index: 1; left: 0; right: 0; bottom: calc(18px + env(safe-area-inset-bottom));
+    display: flex; justify-content: center; gap: 12px;
+  }
+  #keys button {
+    width: 64px; height: 52px; border-radius: 16px; font-size: 22px;
+    background: rgba(42, 42, 53, .8); transition: background .1s;
+  }
+  #keys button:active { background: var(--accent); }
 
   .overlay {
     position: fixed; inset: 0; z-index: 10;
@@ -110,6 +124,7 @@
   <div id="status"><div id="dot"></div><span id="statusText">Connecting…</span></div>
   <div id="tabs" role="tablist">
     <button id="tabPad" class="on" role="tab" aria-label="Trackpad">🖱️</button>
+    <button id="tabTV" role="tab" aria-label="TV">📺</button>
     <button id="tabVoice" role="tab" aria-label="Voice">🎤</button>
   </div>
   <button id="gear" aria-label="Settings">⚙︎</button>
@@ -118,11 +133,21 @@
 <div id="warn" class="hidden"></div>
 
 <div id="pad">
-  <h1>Trackpad</h1>
-  <p>Slide one finger to move</p>
-  <p>Tap = click · Tap, then touch &amp; slide = drag</p>
-  <p>Two fingers = scroll · Two-finger tap = right click</p>
-  <p>Three fingers ← → = desktops · ↑ Mission Control · ↓ App windows</p>
+  <h1 class="macOnly">Trackpad</h1>
+  <p class="macOnly">Slide one finger to move</p>
+  <p class="macOnly">Tap = click · Tap, then touch &amp; slide = drag</p>
+  <p class="macOnly">Two fingers = scroll · Two-finger tap = right click</p>
+  <p class="macOnly">Three fingers ← → = desktops · ↑ Mission Control · ↓ App windows</p>
+  <h1 class="tvOnly">TV</h1>
+  <p class="tvOnly">Slide one finger to show and move the TV pointer</p>
+  <p class="tvOnly">Tap = OK · Two fingers = scroll · Two-finger tap = Back</p>
+</div>
+
+<div id="keys" class="hidden">
+  <button data-key="BACK" aria-label="Back">↩︎</button>
+  <button data-key="HOME" aria-label="Home">⌂</button>
+  <button data-key="VOLUMEDOWN" aria-label="Volume down">🔉</button>
+  <button data-key="VOLUMEUP" aria-label="Volume up">🔊</button>
 </div>
 
 <div id="voice" class="hidden">
@@ -184,10 +209,22 @@
   // ---------------------------------------------------------------- websocket
   const token = new URLSearchParams(location.search).get('t') || '';
   let ws = null, retry = 0;
+  let target = 'mac';          // 'mac' | 'tv': who the pad controls
+  let tvState = { s: 'off', m: 'TV not connected' };
 
   function connect() {
     ws = new WebSocket(`wss://${location.host}/ws?t=${encodeURIComponent(token)}`);
-    ws.onopen = () => { retry = 0; setStatus(true); };
+    ws.onopen = () => {
+      retry = 0;
+      setStatus(true);
+      if (target === 'tv') send({ t: 'h' });  // (re)connect the Mac to the TV
+    };
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.t === 'tv') { tvState = msg; setStatus(true); }
+      } catch {}
+    };
     ws.onclose = () => {
       setStatus(false);
       setTimeout(connect, Math.min(5000, 300 * 2 ** retry++));  // backoff reconnect
@@ -198,13 +235,15 @@
   // droppable=true: skip if the socket is congested (the caller keeps the delta and retries)
   function send(obj, droppable = false) {
     if (!isOpen() || (droppable && ws.bufferedAmount > 512)) return false;
-    ws.send(JSON.stringify(obj));
+    ws.send(JSON.stringify(target === 'tv' ? { ...obj, to: 'tv' } : obj));
     return true;
   }
 
+  // On the TV tab the dot and text follow the TV link, once the Mac is reachable.
   function setStatus(ok) {
-    $('dot').classList.toggle('ok', ok);
-    $('statusText').textContent = ok ? 'Connected' : 'Connecting…';
+    const tv = target === 'tv' && ok;
+    $('dot').classList.toggle('ok', tv ? tvState.s === 'connected' : ok);
+    $('statusText').textContent = tv ? tvState.m : ok ? 'Connected' : 'Connecting…';
   }
 
   // ---------------------------------------------------------------- gesture state
@@ -269,7 +308,7 @@
       startX = lastX = ts[0].clientX; startY = lastY = ts[0].clientY;
       moved = 0; maxTouches = 0; swiped = false;
       accX = accY = mvx = mvy = 0;  // a new touch also stops scroll momentum
-      dragArmed = now - lastTap.t < DOUBLE_TAP_MS
+      dragArmed = target === 'mac' && now - lastTap.t < DOUBLE_TAP_MS
         && Math.hypot(startX - lastTap.x, startY - lastTap.y) < DOUBLE_TAP_PX;
       pad.classList.add('active');
     }
@@ -300,7 +339,7 @@
       const dx = x - swipeX, dy = y - swipeY;
       if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_PX) return;
       const d = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'l' : 'r') : (dy < 0 ? 'u' : 'd');
-      swiped = send({ t: 'g', d });
+      swiped = target === 'mac' && send({ t: 'g', d });
       if (swiped) flash();
       return;
     }
@@ -434,16 +473,34 @@
 
   function showTab(name) {
     const isVoice = name === 'voice';
-    $('tabPad').classList.toggle('on', !isVoice);
+    endGesture();                       // release any held button on the old target
+    accSX = accSY = mvx = mvy = 0;      // don't carry scroll momentum over
+    lastTap = { t: 0, x: 0, y: 0 };
+    target = name === 'tv' ? 'tv' : 'mac';
+    $('tabPad').classList.toggle('on', name === 'pad');
+    $('tabTV').classList.toggle('on', name === 'tv');
     $('tabVoice').classList.toggle('on', isVoice);
     pad.classList.toggle('hidden', isVoice);
+    pad.classList.toggle('tv', name === 'tv');
+    $('keys').classList.toggle('hidden', name !== 'tv');
     voice.classList.toggle('hidden', !isVoice);
-    endGesture();
     if (!isVoice) { stopRecording(false); releaseMic(); }
+    if (target === 'tv') send({ t: 'h' });
+    setStatus(isOpen());
     try { localStorage.setItem('airmouse.tab', name); } catch {}
   }
   $('tabPad').addEventListener('click', () => showTab('pad'));
+  $('tabTV').addEventListener('click', () => showTab('tv'));
   $('tabVoice').addEventListener('click', () => showTab('voice'));
+
+  // TV remote keys (Back, Home, volume)
+  for (const b of $('keys').querySelectorAll('button')) {
+    b.addEventListener('click', () => {
+      keepAwake();
+      send({ t: 'b', k: b.dataset.key });
+      if (navigator.vibrate) navigator.vibrate(8);
+    });
+  }
 
   voice.addEventListener('click', () => {
     keepAwake();
@@ -528,7 +585,10 @@
     if (document.visibilityState !== 'visible') { stopRecording(false); releaseMic(); }
   });
 
-  try { if (localStorage.getItem('airmouse.tab') === 'voice') showTab('voice'); } catch {}
+  try {
+    const tab = localStorage.getItem('airmouse.tab');
+    if (tab === 'voice' || tab === 'tv') showTab(tab);
+  } catch {}
 
   // ---------------------------------------------------------------- settings UI
   const RANGE_FMT = { padSpeed: (v) => v.toFixed(1) + '×' };

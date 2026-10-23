@@ -15,12 +15,20 @@ import Network
 ///   {"t":"d","s":1}             press (1) / release (0) the left button, for dragging
 ///   {"t":"s","dx":0,"dy":-12}   scroll (pixels)
 ///   {"t":"g","d":"l"}           three-finger swipe; d = "l" | "r" | "u" | "d"
+///
+/// With "to":"tv" the same m / c / s messages drive the LG TV's pointer instead (a right
+/// click is the Back key), plus:
+///   {"t":"b","k":"HOME","to":"tv"}   remote control key
+///   {"t":"h","to":"tv"}              the TV tab opened: connect to the TV
+///
+/// Mac → phone: {"t":"tv","s":"connected","m":"TV connected"} whenever the TV link changes.
 final class Server {
     var onClientsChanged: ((Int) -> Void)?  // called on the main queue
     var onError: ((String) -> Void)?        // called on the main queue
 
     private let queue = DispatchQueue(label: "AirMouse.server")
     private let input: InputController
+    private let tv: TVController
     private let port: UInt16
     private let pageURL: URL
     private let rootCAURL: URL
@@ -44,10 +52,11 @@ final class Server {
         init(_ connection: NWConnection) { self.connection = connection }
     }
 
-    init(port: UInt16, token: String, input: InputController, pageURL: URL, rootCAURL: URL) {
+    init(port: UInt16, token: String, input: InputController, tv: TVController, pageURL: URL, rootCAURL: URL) {
         self.port = port
         self.token = token
         self.input = input
+        self.tv = tv
         self.pageURL = pageURL
         self.rootCAURL = rootCAURL
     }
@@ -289,7 +298,7 @@ final class Server {
             for i in payload.indices { payload[i] ^= mask[i % 4] }
 
             switch opcode {
-            case 0x1: handleMessage(payload)                               // text
+            case 0x1: handleMessage(session, payload)                      // text
             case 0x8: sendFrame(session, opcode: 0x8); close(session)      // close
             case 0x9: sendFrame(session, opcode: 0xA, payload: payload)    // ping → pong
             default: break                                                 // pong, binary, continuation
@@ -298,16 +307,51 @@ final class Server {
     }
 
     private func sendFrame(_ session: Session, opcode: UInt8, payload: [UInt8] = []) {
-        guard payload.count < 126 else { return }  // only used for small control frames
-        let frame = Data([0x80 | opcode, UInt8(payload.count)] + payload)
-        session.connection.send(content: frame, completion: .idempotent)
+        guard payload.count <= Self.maxFrame else { return }  // small control and status frames only
+        let header: [UInt8] = payload.count < 126
+            ? [0x80 | opcode, UInt8(payload.count)]
+            : [0x80 | opcode, 126, UInt8(payload.count >> 8), UInt8(payload.count & 0xFF)]
+        session.connection.send(content: Data(header + payload), completion: .idempotent)
     }
 
-    private func handleMessage(_ payload: [UInt8]) {
+    /// Tell every phone how the TV link is doing.
+    func sendTVState(_ state: TVController.State) { sendTVState(state, to: nil) }
+
+    private func sendTVState(_ state: TVController.State, to session: Session?) {
+        let status: String
+        switch state {
+        case .off: status = "off"
+        case .connecting: status = "connecting"
+        case .pairing: status = "pairing"
+        case .connected: status = "connected"
+        case .failed: status = "error"
+        }
+        let message: [String: Any] = ["t": "tv", "s": status, "m": state.label]
+        guard let data = try? JSONSerialization.data(withJSONObject: message) else { return }
+        queue.async {
+            let targets = session.map { [$0] } ?? self.sessions.values.filter(\.isWebSocket)
+            for target in targets where !target.closed { self.sendFrame(target, opcode: 0x1, payload: [UInt8](data)) }
+        }
+    }
+
+    private func handleMessage(_ session: Session, _ payload: [UInt8]) {
         guard let msg = (try? JSONSerialization.jsonObject(with: Data(payload))) as? [String: Any] else { return }
         func number(_ key: String) -> Double {
             let v = (msg[key] as? NSNumber)?.doubleValue ?? 0
             return v.isFinite ? min(max(v, -Self.maxDelta), Self.maxDelta) : 0
+        }
+        if msg["to"] as? String == "tv" {
+            switch msg["t"] as? String {
+            case "m": tv.move(dx: number("dx"), dy: number("dy"))
+            case "c": if msg["b"] as? String == "r" { tv.button("BACK") } else { tv.click() }
+            case "s": tv.scroll(dx: number("dx"), dy: number("dy"))
+            case "b": if let key = msg["k"] as? String { tv.button(key) }
+            case "h":
+                tv.wake()
+                sendTVState(tv.state, to: session)
+            default: break
+            }
+            return
         }
         switch msg["t"] as? String {
         case "m": input.move(dx: number("dx"), dy: number("dy"))

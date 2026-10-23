@@ -47,6 +47,11 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         menu.addItem(ActionItem("Copy Link") { [unowned self] in app.copyLink() })
         menu.addItem(.separator())
 
+        menu.addItem(withTitle: "📺 \(app.tv.state.label) — \(Preferences.tvHost)", action: nil, keyEquivalent: "")
+            .isEnabled = false
+        menu.addItem(ActionItem("Set TV Address…") { [unowned self] in app.setTVAddress() })
+        menu.addItem(.separator())
+
         menu.addItem(ActionItem("Send Root Certificate via AirDrop…") { [unowned self] in app.shareRootCertificate() })
         menu.addItem(ActionItem("Show Root Certificate in Finder") { [unowned self] in app.revealRootCertificate() })
         menu.addItem(.separator())

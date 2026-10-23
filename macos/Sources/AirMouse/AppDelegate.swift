@@ -3,6 +3,7 @@ import Network
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let input = InputController()
+    let tv = TVController(host: Preferences.tvHost)
     private let certificates = CertificateManager()
     private var server: Server!
     private var statusBar: StatusBarController!
@@ -17,7 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var rootCAURL: URL { certificates.rootCAURL }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        server = Server(port: Preferences.port, token: Preferences.token, input: input,
+        server = Server(port: Preferences.port, token: Preferences.token, input: input, tv: tv,
                         pageURL: Self.pageURL, rootCAURL: certificates.rootCAURL)
         server.onClientsChanged = { [weak self] count in
             self?.clients = count
@@ -26,6 +27,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         server.onError = { [weak self] message in
             self?.errorMessage = message
             self?.statusBar.refresh()
+        }
+        tv.onStateChanged = { [weak self] state in
+            self?.server.sendTVState(state)
         }
         statusBar = StatusBarController(app: self)
         startServer()
@@ -88,6 +92,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func revealRootCertificate() {
         NSWorkspace.shared.activateFileViewerSelecting([certificates.rootCAURL])
+    }
+
+    /// Ask for the LG TV's IP address (the TV tab on the phone controls it).
+    func setTVAddress() {
+        let alert = NSAlert()
+        alert.messageText = "LG TV Address"
+        alert.informativeText = "IP address of the LG webOS TV that the phone's TV tab controls. "
+            + "The first time, the TV asks you to allow AirMouse."
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
+        field.stringValue = Preferences.tvHost
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        alert.window.initialFirstResponder = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let host = field.stringValue.trimmingCharacters(in: .whitespaces)
+        guard !host.isEmpty, host != Preferences.tvHost else { return }
+        Preferences.tvHost = host
+        tv.setHost(host)
     }
 
     func restartServer() {

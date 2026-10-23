@@ -163,6 +163,8 @@ def _num(value) -> float:
 
 
 def handle_message(mouse: Mouse, desktop: Desktop, msg: dict) -> None:
+    if msg.get("to") == "tv":
+        return  # the LG TV tab needs the Mac app; never move the Mac cursor for it
     t = msg.get("t")
     if t == "m":
         mouse.move(_num(msg.get("dx", 0)), _num(msg.get("dy", 0)))

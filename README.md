@@ -20,7 +20,7 @@ AirMouse/
 │   ├── Resources/            #   Info.plist, AppIcon.icns
 │   ├── scripts/make-icon.swift
 │   └── build.sh              #   builds/signs AirMouse.app, --install copies to /Applications
-├── static/index.html         # the trackpad + voice page (shared by the app and the Python server)
+├── static/index.html         # the trackpad + TV + voice page (shared by the app and the Python server)
 ├── server.py, setup.sh, requirements.txt   # optional Python server, same protocol
 └── README.md
 ```
@@ -123,6 +123,20 @@ iPhone mic ──(POST /voice?t=TOKEN)──▶ AirMouse.app ──▶ ~/Library
 
 The first time, Safari asks for microphone access. Recordings are limited to 10 MB (about 10 minutes).
 
+### LG TV pointer
+
+The 📺 tab turns the pad into a Magic Remote for an LG webOS TV: slide a finger and the TV's own pointer
+appears over whatever is on screen. Tap = OK, two fingers = scroll, two-finger tap = Back, and the buttons
+at the bottom are Back, Home and volume.
+
+Set the TV's IP address with **Set TV Address…** in the menu (default `192.168.1.51`). The first time the
+tab opens, the TV asks to allow AirMouse; accept it with the remote. The Mac keeps the key the TV returns,
+so later connections need no prompt. The Mac must be awake, because it relays the phone's input to the TV:
+
+```
+iPhone ──(wss, "to":"tv")──▶ AirMouse.app ──(SSAP wss://TV:3001)──▶ getPointerInputSocket ──▶ TV pointer
+```
+
 ## Troubleshooting
 
 **Page doesn't load / "Connecting…" never turns green**
@@ -143,6 +157,11 @@ The first time, Safari asks for microphone access. Recordings are limited to 10 
 
 **Voice clip is sent but no text appears**
 - Haki must be running, with an API key saved and Accessibility permission granted. Check its menu bar icon.
+
+**TV tab says "TV unreachable" or "TV declined pairing"**
+- The TV must be on and on the same network, at the address in **Set TV Address…**.
+- "Mobile TV On" / "LG Connect Apps" must be enabled in the TV's network settings.
+- After a decline, switch tabs and back to 📺 to get the prompt again.
 
 **Three-finger swipe does nothing**
 - Check that the Mission Control shortcuts above are enabled. To switch desktops you need at least two
@@ -171,6 +190,11 @@ One JSON object per WebSocket text message (phone → Mac):
 {"t":"s","dx":0,"dy":-12}    // scroll in pixels (vertical + horizontal)
 {"t":"g","d":"l"}            // three-finger swipe: d = "l" | "r" | "u" | "d"
 ```
+
+With `"to":"tv"`, `m`, `c` and `s` drive the LG TV's pointer instead (a right click is the Back key), plus
+`{"t":"b","k":"HOME","to":"tv"}` for a remote key and `{"t":"h","to":"tv"}` when the TV tab opens.
+The Mac answers with `{"t":"tv","s":"connected","m":"TV connected"}` whenever the TV link changes
+(`s` = `off` | `connecting` | `pairing` | `connected` | `error`).
 
 Voice clips are a separate HTTPS request: `POST /voice?t=TOKEN` with the recording as the body
 (`Content-Type: audio/mp4`, `audio/webm`, …). The answer is `200 OK` once the clip is handed to Haki,
