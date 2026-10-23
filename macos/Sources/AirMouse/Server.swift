@@ -20,6 +20,7 @@ import Network
 /// click is the Back key), plus:
 ///   {"t":"b","k":"HOME","to":"tv"}   remote control key (also CHANNELUP, VOLUMEDOWN, digits, …)
 ///   {"t":"p","to":"tv"}              power: off, or wake the TV from standby
+///   {"t":"n","n":"25","to":"tv"}     go to channel 25
 ///   {"t":"h","to":"tv"}              the TV tab opened: connect to the TV
 ///
 /// Mac → phone: {"t":"tv","s":"connected","m":"TV connected"} whenever the TV link changes.
@@ -348,6 +349,7 @@ final class Server {
             case "s": tv.scroll(dx: number("dx"), dy: number("dy"))
             case "b": if let key = msg["k"] as? String { tv.button(key) }
             case "p": tv.power()
+            case "n": if let number = msg["n"] as? String { tv.openChannel(number) }
             case "h":
                 tv.wake()
                 sendTVState(tv.state, to: session)

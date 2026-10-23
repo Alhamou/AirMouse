@@ -34,8 +34,12 @@ enum Preferences {
     }
 
     /// Key the TV issues when AirMouse is accepted, so it doesn't ask again. One per TV address.
-    static func tvClientKey(host: String) -> String? { defaults.string(forKey: "tvClientKey." + host) }
-    static func setTVClientKey(_ key: String?, host: String) { defaults.set(key, forKey: "tvClientKey." + host) }
+    /// A key only covers the permissions it was issued for: bump the revision when TVController's
+    /// manifest asks for more, so the TV asks once more instead of refusing the new requests.
+    private static let tvKeyRevision = 3
+    static func tvClientKey(host: String) -> String? { defaults.string(forKey: tvKeyName(host)) }
+    static func setTVClientKey(_ key: String?, host: String) { defaults.set(key, forKey: tvKeyName(host)) }
+    private static func tvKeyName(_ host: String) -> String { "tvClientKey.\(tvKeyRevision)." + host }
 
     /// The TV's hardware address, learned while it's on, to wake it from standby.
     static func tvMAC(host: String) -> String? { defaults.string(forKey: "tvMAC." + host) }

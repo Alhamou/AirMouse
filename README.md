@@ -197,7 +197,7 @@ One JSON object per WebSocket text message (phone → Mac):
 
 With `"to":"tv"`, `m`, `c` and `s` drive the LG TV's pointer instead (a right click is the Back key), plus
 `{"t":"b","k":"HOME","to":"tv"}` for a remote key (also `CHANNELUP`, `VOLUMEDOWN`, `MUTE`, digits `0`–`9`),
-`{"t":"p","to":"tv"}` for power (off, or wake from standby) and `{"t":"h","to":"tv"}` when the TV tab opens.
+`{"t":"p","to":"tv"}` for power (off, or wake from standby), `{"t":"n","n":"25","to":"tv"}` to go to a channel and `{"t":"h","to":"tv"}` when the TV tab opens.
 The Mac answers with `{"t":"tv","s":"connected","m":"TV connected"}` whenever the TV link changes
 (`s` = `off` | `connecting` | `pairing` | `connected` | `error`).
 

@@ -570,7 +570,7 @@
   vol.addEventListener('pointerup', volEnd);
   vol.addEventListener('pointercancel', volEnd);
 
-  // Channel number pad: type the number, ✓ sends the digits and OK, like the remote.
+  // Channel number pad: type the number, ✓ asks the Mac to tune to it.
   let channel = '';
   const showChannel = () => { $('chDisplay').textContent = channel; };
   const closeNumpad = () => { $('numpad').classList.add('hidden'); channel = ''; showChannel(); };
@@ -581,10 +581,7 @@
       tick();
       if (b.id === 'chDel') channel = channel.slice(0, -1);
       else if (b.id === 'chGo') {
-        if (channel) {
-          for (const d of channel) send({ t: 'b', k: d });
-          send({ t: 'b', k: 'ENTER' });
-        }
+        if (channel) send({ t: 'n', n: channel });
         return closeNumpad();
       } else if (channel.length < MAX_CHANNEL_DIGITS) channel += b.textContent;
       showChannel();

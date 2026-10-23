@@ -39,6 +39,8 @@ final class TVController: NSObject, URLSessionDelegate {
     private var heartbeat: DispatchSourceTimer?
     private var lastAttempt = Date.distantPast
     private var scrollX = 0.0, scrollY = 0.0        // scroll not yet sent (TV scrolls in steps)
+    private var channels: [[String: Any]]?          // the TV's channel list, fetched on first use
+    private var pendingChannel: String?             // number to tune once the list arrives
     private(set) var state: State = .off
 
     private static let retryInterval = 3.0          // seconds between connection attempts
@@ -104,6 +106,39 @@ final class TVController: NSObject, URLSessionDelegate {
         }
     }
 
+    /// Tune to a channel by its number ("25", "7-1"). Looks it up in the TV's channel list and
+    /// opens it directly: typing digits + OK on the pointer socket is unreliable, because while
+    /// the pointer is visible OK clicks at the pointer and closes the number entry.
+    func openChannel(_ number: String) {
+        guard !number.isEmpty, number.count <= 8, number.allSatisfy({ $0.isNumber || $0 == "-" }) else { return }
+        queue.async {
+            guard self.state == .connected else { return self.ensureConnected() }
+            if let channels = self.channels { return self.tune(number, in: channels) }
+            self.pendingChannel = number
+            self.request(id: "channels", uri: "ssap://tv/getChannelList")
+        }
+    }
+
+    private func tune(_ number: String, in channels: [[String: Any]]) {
+        let match = channels.first { $0["channelNumber"] as? String == number }
+            ?? channels.first { ($0["channelNumber"] as? String)?.hasPrefix(number + "-") == true }
+        guard let id = match?["channelId"] as? String else {
+            NSLog("AirMouse: channel %@ not in the TV's list of %d, typing the digits instead", number, channels.count)
+            return typeDigits(number)
+        }
+        request(id: "open", uri: "ssap://tv/openChannel", payload: ["channelId": id])
+    }
+
+    /// Fallback (no channel list, e.g. an external input): type the digits like the remote,
+    /// one at a time, and let the TV tune when the number entry times out. No OK, see above.
+    private func typeDigits(_ number: String) {
+        for (i, digit) in number.filter(\.isNumber).enumerated() {
+            queue.asyncAfter(deadline: .now() + 0.25 * Double(i)) {
+                self.sendNow("type:button\nname:\(digit)\n\n")
+            }
+        }
+    }
+
     // MARK: Connection
 
     private func send(_ command: String) {
@@ -129,6 +164,7 @@ final class TVController: NSObject, URLSessionDelegate {
         setState(.connecting)
 
         let task = session.webSocketTask(with: url)
+        task.maximumMessageSize = 32 << 20  // the channel list easily passes the 1 MB default
         control = task
         task.resume()
         receive(task)
@@ -156,7 +192,8 @@ final class TVController: NSObject, URLSessionDelegate {
                     self.receive(task)
                 case .success:
                     self.receive(task)
-                case .failure:
+                case .failure(let error):
+                    NSLog("AirMouse: TV connection closed: %@", error.localizedDescription)
                     let reason = self.state == .connecting ? "TV unreachable (is it on?)" : "TV connection lost"
                     self.disconnect(.failed(reason))
                 }
@@ -190,6 +227,16 @@ final class TVController: NSObject, URLSessionDelegate {
             rememberMAC()
         case (_, "pointer"):
             disconnect(.failed("TV refused pointer input"))
+        case (let type, "channels"):
+            guard let number = pendingChannel else { return }
+            pendingChannel = nil
+            if type == "response", let list = payload["channelList"] as? [[String: Any]], !list.isEmpty {
+                channels = list
+                tune(number, in: list)
+            } else {
+                NSLog("AirMouse: no TV channel list (%@), typing the digits instead", String(text.prefix(300)))
+                typeDigits(number)
+            }
         default:
             break
         }
@@ -231,6 +278,8 @@ final class TVController: NSObject, URLSessionDelegate {
         control = nil
         scrollX = 0
         scrollY = 0
+        channels = nil
+        pendingChannel = nil
         setState(newState)
     }
 
@@ -275,18 +324,22 @@ final class TVController: NSObject, URLSessionDelegate {
 
     // MARK: Registration manifest
 
-    /// Permissions AirMouse asks for: pointer, keys and volume only.
+    /// The permission set of aiowebostv (Home Assistant's LG integration), which is known to be
+    /// granted to unsigned clients. A narrower set leaves e.g. tv/openChannel at "401 insufficient
+    /// permissions"; bump Preferences.tvKeyRevision whenever this list changes.
     private static let manifest: [String: Any] = [
         "manifestVersion": 1,
-        "appVersion": "1.0",
+        "appVersion": "1.1",
         "permissions": [
-            "CONTROL_AUDIO",
-            "CONTROL_INPUT_JOYSTICK",
-            "CONTROL_INPUT_MEDIA_PLAYBACK",
-            "CONTROL_INPUT_TEXT",
-            "CONTROL_INPUT_TV",
-            "CONTROL_MOUSE_AND_KEYBOARD",
-            "READ_INPUT_DEVICE_LIST",
+            "APP_TO_APP", "CLOSE", "CONTROL_AUDIO", "CONTROL_DISPLAY", "CONTROL_INPUT_JOYSTICK",
+            "CONTROL_INPUT_MEDIA_PLAYBACK", "CONTROL_INPUT_MEDIA_RECORDING", "CONTROL_INPUT_TEXT",
+            "CONTROL_INPUT_TV", "CONTROL_MOUSE_AND_KEYBOARD", "CONTROL_POWER", "CONTROL_TV_SCREEN",
+            "LAUNCH", "LAUNCH_WEBAPP", "READ_APP_STATUS", "READ_COUNTRY_INFO", "READ_CURRENT_CHANNEL",
+            "READ_INPUT_DEVICE_LIST", "READ_INSTALLED_APPS", "READ_LGE_SDX", "READ_LGE_TV_INPUT_EVENTS",
+            "READ_NETWORK_STATE", "READ_NOTIFICATIONS", "READ_POWER_STATE", "READ_RUNNING_APPS",
+            "READ_SETTINGS", "READ_TV_CHANNEL_LIST", "READ_TV_CURRENT_TIME", "READ_UPDATE_INFO",
+            "SEARCH", "TEST_OPEN", "TEST_PROTECTED", "TEST_SECURE", "UPDATE_FROM_REMOTE_APP",
+            "WRITE_NOTIFICATION_ALERT", "WRITE_NOTIFICATION_TOAST", "WRITE_SETTINGS",
         ],
     ]
 }
@@ -330,3 +383,4 @@ enum WakeOnLAN {
         }
     }
 }
+
