@@ -8,6 +8,13 @@
 <meta name="theme-color" content="#0b0b0f">
 <meta name="referrer" content="no-referrer">
 <title>AirMouse</title>
+<script>
+  // Opened from the Home Screen: iOS gives fixed layers the height minus the status bar, which
+  // leaves a black strip at the bottom. The .standalone rules below size them to the full screen.
+  if (navigator.standalone || matchMedia('(display-mode: standalone)').matches) {
+    document.documentElement.classList.add('standalone');
+  }
+</script>
 <style>
   :root {
     --bg: #0b0b0f; --panel: #16161d; --line: #2a2a35; --text: #e8e8ef;
@@ -116,6 +123,16 @@
     display: flex; flex-direction: column; align-items: center;
   }
   .hidden { display: none !important; }
+
+  /* Home Screen app: full-screen layers, and the header a bit lower below the clock / Dynamic Island */
+  .standalone, .standalone body { background: #0f0f12; }  /* matches the pad's edge if any gap remains */
+  .standalone #pad, .standalone #voice, .standalone .overlay { bottom: auto; height: 100vh; height: 100lvh; }
+  .standalone #keys {
+    top: 0; bottom: auto; height: 100vh; height: 100lvh; justify-content: flex-end;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom)); pointer-events: none;
+  }
+  .standalone #keys .row { pointer-events: auto; }
+  .standalone header { padding-top: 22px; }
 
   #sheet { justify-content: flex-end; background: rgba(0, 0, 0, .6); }
   .panel {
