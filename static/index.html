@@ -261,7 +261,9 @@
     e.preventDefault();
     keepAwake();
     const ts = e.touches, now = performance.now();
-    if (!touching) {  // first finger down: begin a new gesture
+    // Every finger on the screen is new: begin a new gesture, even if a lost
+    // touchend left the previous one open.
+    if (!touching || e.changedTouches.length === ts.length) {
       touching = true; mode = 'move'; panning = false; speed = 0;
       downT = lastMoveT = now;
       startX = lastX = ts[0].clientX; startY = lastY = ts[0].clientY;

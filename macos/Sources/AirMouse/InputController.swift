@@ -8,6 +8,7 @@ final class InputController {
     private var overviewKey: CGKeyCode?        // key that opened Mission Control / App Exposé
 
     private enum Key {
+        static let control: CGKeyCode = 59
         static let left: CGKeyCode = 123, right: CGKeyCode = 124, down: CGKeyCode = 125, up: CGKeyCode = 126
     }
 
@@ -38,8 +39,14 @@ final class InputController {
         }
         // While the button is held, apps expect "dragged" events instead of "moved".
         let type: CGEventType = dragging ? .leftMouseDragged : .mouseMoved
-        CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: p, mouseButton: .left)?
-            .post(tap: .cghidEventTap)
+        post(CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: p, mouseButton: .left))
+    }
+
+    /// Mouse events go out with no modifier flags. Otherwise they can pick up a Control
+    /// left "down" by a swipe shortcut, and macOS turns Ctrl + left click into a right click.
+    private func post(_ event: CGEvent?) {
+        event?.flags = []
+        event?.post(tap: .cghidEventTap)
     }
 
     /// Press + release. count = 2 marks the second click of a double click,
@@ -52,7 +59,7 @@ final class InputController {
         for type in [down, up] {
             let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: p, mouseButton: button)
             event?.setIntegerValueField(.mouseEventClickState, value: Int64(count))
-            event?.post(tap: .cghidEventTap)
+            post(event)
         }
         overviewKey = nil  // a click picks a window in Mission Control, which closes it
     }
@@ -61,9 +68,8 @@ final class InputController {
     func hold(_ down: Bool) {
         guard down != dragging else { return }
         dragging = down
-        CGEvent(mouseEventSource: nil, mouseType: down ? .leftMouseDown : .leftMouseUp,
-                mouseCursorPosition: cursor, mouseButton: .left)?
-            .post(tap: .cghidEventTap)
+        post(CGEvent(mouseEventSource: nil, mouseType: down ? .leftMouseDown : .leftMouseUp,
+                     mouseCursorPosition: cursor, mouseButton: .left))
     }
 
     func scroll(dx: Int32, dy: Int32) {
@@ -103,5 +109,9 @@ final class InputController {
             event?.flags = [.maskControl, .maskSecondaryFn]
             event?.post(tap: .cghidEventTap)
         }
+        // Release Control explicitly so the system doesn't keep it as held.
+        let controlUp = CGEvent(keyboardEventSource: nil, virtualKey: Key.control, keyDown: false)
+        controlUp?.flags = []
+        controlUp?.post(tap: .cghidEventTap)
     }
 }
