@@ -51,6 +51,7 @@
     background: radial-gradient(120% 90% at 50% 40%, #1e1e25 0%, #141418 60%, #0f0f12 100%);
   }
   #voice * { pointer-events: none; }
+  #voice #cancelRec { pointer-events: auto; margin-top: 6px; padding: 12px 28px; }
   #mic {
     width: 132px; height: 132px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
     font-size: 56px; background: var(--line); transition: background .2s, transform .2s;
@@ -128,6 +129,7 @@
   <div id="mic">🎤</div>
   <h1 id="voiceTitle">Tap to talk</h1>
   <p id="voiceHint">Speak, then tap again. Haki types the text on your Mac.</p>
+  <button id="cancelRec" class="btn hidden">✕ Cancel</button>
 </div>
 
 <!-- Settings sheet -->
@@ -421,9 +423,10 @@
   let voiceTick = 0, resetTimer = 0;
 
   function voiceState(state, title, hint = '') {
-    voice.className = state;
+    voice.className = state + (voice.classList.contains('hidden') ? ' hidden' : '');
     $('voiceTitle').textContent = title;
     $('voiceHint').textContent = hint;
+    $('cancelRec').classList.toggle('hidden', state !== 'recording');
   }
   const voiceIdle = () => voiceState('', 'Tap to talk', 'Speak, then tap again. Haki types the text on your Mac.');
 
@@ -444,6 +447,13 @@
     keepAwake();
     if (recorder && recorder.state === 'recording') stopRecording(true);
     else if (!voiceBusy) startRecording();
+  });
+  $('cancelRec').addEventListener('click', (e) => {
+    e.stopPropagation();
+    stopRecording(false);
+    voiceState('', 'Cancelled', 'Nothing was sent.');
+    clearTimeout(resetTimer);
+    resetTimer = setTimeout(voiceIdle, 1500);
   });
 
   async function startRecording() {

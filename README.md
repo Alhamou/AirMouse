@@ -110,6 +110,7 @@ Tip: in Safari, tap **Share → Add to Home Screen** to get a full-screen launch
 ### Voice typing (with Haki)
 
 The 🎤 tab at the top switches from the trackpad to voice. Tap anywhere to start talking, then tap again to send.
+While recording, "✕ Cancel" discards the clip without sending it.
 The text is typed into whatever field is focused on the Mac.
 
 The transcription itself is done by [Haki](https://github.com/Alhamou/Haki), which must be installed in `/Applications`.
