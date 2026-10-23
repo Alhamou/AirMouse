@@ -227,7 +227,7 @@ final class Server {
                     body: (try? Data(contentsOf: Self.resourceURL("apple-touch-icon", "png"))) ?? Data())
         case "/" where authorized:
             respond(session, status: "200 OK", type: "text/html; charset=utf-8",
-                    body: (try? Data(contentsOf: pageURL)) ?? Data("index.html missing\n".utf8),
+                    body: Self.inlineIcon(in: (try? Data(contentsOf: pageURL)) ?? Data("index.html missing\n".utf8)),
                     extra: ["Cache-Control": "no-store", "Referrer-Policy": "no-referrer"])
         case "/ws" where authorized && headers["upgrade"]?.lowercased() == "websocket":
             upgrade(session, key: headers["sec-websocket-key"])
@@ -370,6 +370,20 @@ final class Server {
         case "g": if let d = msg["d"] as? String { input.swipe(d) }
         default: break
         }
+    }
+
+    /// The page links the Home Screen icon as /apple-touch-icon.png, but iOS fetches that from a
+    /// separate process that doesn't reliably get through our private-CA HTTPS, and then falls back
+    /// to a letter on black. Embedding the icon in the page as a data: URL avoids the extra fetch.
+    private static let iconLink = Data(#"href="/apple-touch-icon.png""#.utf8)
+    private static let inlineIconLink: Data? = (try? Data(contentsOf: resourceURL("apple-touch-icon", "png")))
+        .map { Data(#"href="data:image/png;base64,\#($0.base64EncodedString())""#.utf8) }
+
+    private static func inlineIcon(in page: Data) -> Data {
+        guard let link = inlineIconLink, let range = page.range(of: iconLink) else { return page }
+        var page = page
+        page.replaceSubrange(range, with: link)
+        return page
     }
 
     /// A file in the .app's Resources, or in macos/Resources when run with `swift run`.
