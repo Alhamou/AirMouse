@@ -7,6 +7,7 @@ import Network
 ///   GET /?t=TOKEN     the trackpad page
 ///   GET /ws?t=TOKEN   WebSocket for input messages
 ///   GET /cert         the public root certificate (to install on the phone)
+///   GET /apple-touch-icon.png   the iPhone Home Screen icon
 ///   POST /voice?t=TOKEN  audio recorded on the phone (body), handed to Haki to type as text
 ///
 /// Messages (phone → Mac), one JSON object per WebSocket text frame:
@@ -220,6 +221,10 @@ final class Server {
             respond(session, status: "200 OK", type: "application/x-x509-ca-cert",
                     body: (try? Data(contentsOf: rootCAURL)) ?? Data(),
                     extra: ["Content-Disposition": "attachment; filename=\"AirMouse-rootCA.crt\""])
+        case "/apple-touch-icon.png":
+            // Public: iOS fetches it without the token when adding the page to the Home Screen.
+            respond(session, status: "200 OK", type: "image/png",
+                    body: (try? Data(contentsOf: Self.resourceURL("apple-touch-icon", "png"))) ?? Data())
         case "/" where authorized:
             respond(session, status: "200 OK", type: "text/html; charset=utf-8",
                     body: (try? Data(contentsOf: pageURL)) ?? Data("index.html missing\n".utf8),
@@ -365,6 +370,13 @@ final class Server {
         case "g": if let d = msg["d"] as? String { input.swipe(d) }
         default: break
         }
+    }
+
+    /// A file in the .app's Resources, or in macos/Resources when run with `swift run`.
+    private static func resourceURL(_ name: String, _ ext: String) -> URL {
+        Bundle.main.url(forResource: name, withExtension: ext)
+            ?? URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+                .deletingLastPathComponent().appendingPathComponent("Resources/\(name).\(ext)")
     }
 
     private static func constantTimeEqual(_ a: String, _ b: String) -> Bool {

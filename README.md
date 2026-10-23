@@ -105,7 +105,7 @@ Settings (⚙︎, saved on the phone):
 - **Scroll momentum**: keep scrolling after a two-finger flick.
 - **Invert scroll**.
 
-Tip: in Safari, tap **Share → Add to Home Screen** to get a full-screen launcher.
+Tip: in Safari, tap **Share → Add to Home Screen** to get a full-screen launcher with the AirMouse icon.
 
 ### Voice typing (with Haki)
 

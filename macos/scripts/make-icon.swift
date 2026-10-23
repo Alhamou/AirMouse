@@ -1,23 +1,29 @@
 // Renders the AirMouse app icon (1024×1024 PNG): a trackpad with a pointer on a blue squircle.
 // Usage: swift scripts/make-icon.swift out.png   (build.sh turns it into AppIcon.icns)
+//        swift scripts/make-icon.swift --ios out.png   full-bleed square for the iPhone Home Screen
+//                                                      (iOS rounds the corners itself)
 import AppKit
 
-let output = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "AppIcon.png"
+let fullBleed = CommandLine.arguments.contains("--ios")
+let output = CommandLine.arguments.dropFirst().first { !$0.hasPrefix("--") } ?? "AppIcon.png"
 let size = 1024.0
 
 let image = NSImage(size: NSSize(width: size, height: size), flipped: true) { _ in
     // Squircle background (macOS icon grid: 824 pt body, centered) with a soft drop shadow.
     let body = NSRect(x: 100, y: 100, width: 824, height: 824)
-    let squircle = NSBezierPath(roundedRect: body, xRadius: 185, yRadius: 185)
-    NSGraphicsContext.saveGraphicsState()
-    let shadow = NSShadow()
-    shadow.shadowColor = NSColor.black.withAlphaComponent(0.35)
-    shadow.shadowBlurRadius = 24
-    shadow.shadowOffset = NSSize(width: 0, height: -10)
-    shadow.set()
-    NSColor.black.setFill()
-    squircle.fill()
-    NSGraphicsContext.restoreGraphicsState()
+    let squircle = fullBleed ? NSBezierPath(rect: NSRect(x: 0, y: 0, width: size, height: size))
+                             : NSBezierPath(roundedRect: body, xRadius: 185, yRadius: 185)
+    if !fullBleed {
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.35)
+        shadow.shadowBlurRadius = 24
+        shadow.shadowOffset = NSSize(width: 0, height: -10)
+        shadow.set()
+        NSColor.black.setFill()
+        squircle.fill()
+        NSGraphicsContext.restoreGraphicsState()
+    }
     NSGradient(starting: NSColor(srgbRed: 0.36, green: 0.58, blue: 1.00, alpha: 1),
                ending: NSColor(srgbRed: 0.13, green: 0.25, blue: 0.75, alpha: 1))!
         .draw(in: squircle, angle: 90)

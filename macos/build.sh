@@ -29,12 +29,20 @@ if [[ ! -f Resources/AppIcon.icns ]]; then
   iconutil -c icns "$ICONSET" -o Resources/AppIcon.icns
 fi
 
+if [[ ! -f Resources/apple-touch-icon.png ]]; then
+  echo "==> Rendering iPhone Home Screen icon"
+  TMP_ICON="$(mktemp -d)/ios.png"
+  swift scripts/make-icon.swift --ios "$TMP_ICON" >/dev/null
+  sips -z 180 180 "$TMP_ICON" --out Resources/apple-touch-icon.png >/dev/null
+fi
+
 echo "==> Assembling $APP"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/AirMouse"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+cp Resources/apple-touch-icon.png "$APP/Contents/Resources/apple-touch-icon.png"   # iPhone Home Screen icon
 cp ../static/index.html "$APP/Contents/Resources/index.html"   # the trackpad page
 
 IDENTITY="${CODESIGN_IDENTITY:-$(security find-identity -v -p codesigning \
