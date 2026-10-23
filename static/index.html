@@ -87,13 +87,29 @@
   /* TV remote keys, floating at the bottom of the pad */
   #keys {
     position: fixed; z-index: 1; left: 0; right: 0; bottom: calc(18px + env(safe-area-inset-bottom));
-    display: flex; justify-content: center; gap: 12px;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
   }
-  #keys button {
-    width: 64px; height: 52px; border-radius: 16px; font-size: 22px;
+  .row { display: flex; justify-content: center; gap: 10px; }
+  #keys button, #numpad .keys button {
+    width: 60px; height: 50px; border-radius: 16px; font-size: 21px;
     background: rgba(42, 42, 53, .8); transition: background .1s;
   }
-  #keys button:active { background: var(--accent); }
+  #keys button:active, #keys button.on, #numpad .keys button:active { background: var(--accent); }
+  #keys .ch { font-size: 14px; font-weight: 600; letter-spacing: .02em; }
+  #keys .power { color: var(--bad); }
+  #keys .power:active { color: inherit; }
+  /* Volume: press and slide left / right */
+  #keys #vol { width: 130px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; touch-action: none; }
+  #vol .arrow { font-size: 15px; color: var(--dim); }
+
+  /* Channel number pad */
+  #numpad { justify-content: flex-end; background: rgba(0, 0, 0, .6); }
+  #numpad .panel { max-width: 360px; text-align: center; }
+  #chDisplay { height: 52px; margin: 0 0 16px; font-size: 38px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: .08em; }
+  #chDisplay:empty::before { content: 'Channel'; color: var(--dim); font-size: 18px; font-weight: 400; letter-spacing: 0; }
+  #numpad .keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
+  #numpad .keys button { width: auto; height: 56px; font-size: 24px; }
+  #numpad .keys #chGo { background: var(--accent); color: #fff; }
 
   .overlay {
     position: fixed; inset: 0; z-index: 10;
@@ -141,13 +157,34 @@
   <h1 class="tvOnly">TV</h1>
   <p class="tvOnly">Slide one finger to show and move the TV pointer</p>
   <p class="tvOnly">Tap = OK · Two fingers = scroll · Two-finger tap = Back</p>
+  <p class="tvOnly">Volume: press 🔊 and slide ‹ › · tap it to mute</p>
 </div>
 
 <div id="keys" class="hidden">
-  <button data-key="BACK" aria-label="Back">↩︎</button>
-  <button data-key="HOME" aria-label="Home">⌂</button>
-  <button data-key="VOLUMEDOWN" aria-label="Volume down">🔉</button>
-  <button data-key="VOLUMEUP" aria-label="Volume up">🔊</button>
+  <div class="row">
+    <button data-key="BACK" aria-label="Back">↩︎</button>
+    <button data-key="HOME" aria-label="Home">⌂</button>
+    <button id="numBtn" class="ch" aria-label="Channel number">123</button>
+    <button id="powerBtn" class="power" aria-label="Power">⏻</button>
+  </div>
+  <div class="row">
+    <button data-key="CHANNELDOWN" class="ch" aria-label="Channel down">CH−</button>
+    <button id="vol" aria-label="Volume: slide left or right, tap to mute"><span class="arrow">‹</span><span id="volIcon">🔊</span><span class="arrow">›</span></button>
+    <button data-key="CHANNELUP" class="ch" aria-label="Channel up">CH+</button>
+  </div>
+</div>
+
+<!-- Channel number pad -->
+<div id="numpad" class="overlay hidden">
+  <div class="panel">
+    <div id="chDisplay"></div>
+    <div class="keys">
+      <button>1</button><button>2</button><button>3</button>
+      <button>4</button><button>5</button><button>6</button>
+      <button>7</button><button>8</button><button>9</button>
+      <button id="chDel" aria-label="Delete">⌫</button><button>0</button><button id="chGo" aria-label="Go to channel">✓</button>
+    </div>
+  </div>
 </div>
 
 <div id="voice" class="hidden">
@@ -483,6 +520,7 @@
     pad.classList.toggle('hidden', isVoice);
     pad.classList.toggle('tv', name === 'tv');
     $('keys').classList.toggle('hidden', name !== 'tv');
+    if (name !== 'tv') closeNumpad();
     voice.classList.toggle('hidden', !isVoice);
     if (!isVoice) { stopRecording(false); releaseMic(); }
     if (target === 'tv') send({ t: 'h' });
@@ -493,12 +531,63 @@
   $('tabTV').addEventListener('click', () => showTab('tv'));
   $('tabVoice').addEventListener('click', () => showTab('voice'));
 
-  // TV remote keys (Back, Home, volume)
-  for (const b of $('keys').querySelectorAll('button')) {
+  // ---------------------------------------------------------------- TV remote keys
+  const VOL_STEP_PX = 22;      // finger travel per volume step on the volume button
+  const MAX_CHANNEL_DIGITS = 4;
+  const tick = () => { if (navigator.vibrate) navigator.vibrate(8); };
+
+  for (const b of $('keys').querySelectorAll('[data-key]')) {
+    b.addEventListener('click', () => { keepAwake(); send({ t: 'b', k: b.dataset.key }); tick(); });
+  }
+  $('powerBtn').addEventListener('click', () => { keepAwake(); send({ t: 'p' }); tick(); });
+
+  // Volume: press and slide right = louder, left = quieter, one step per VOL_STEP_PX; a plain tap mutes.
+  const vol = $('vol');
+  let volX = null, volSteps = 0;
+  vol.addEventListener('pointerdown', (e) => {
+    keepAwake();
+    vol.setPointerCapture(e.pointerId);
+    volX = e.clientX; volSteps = 0;
+    vol.classList.add('on');
+  });
+  vol.addEventListener('pointermove', (e) => {
+    if (volX === null) return;
+    const steps = Math.trunc((e.clientX - volX) / VOL_STEP_PX);
+    if (!steps) return;
+    volX += steps * VOL_STEP_PX;
+    for (let i = 0; i < Math.abs(steps); i++) send({ t: 'b', k: steps > 0 ? 'VOLUMEUP' : 'VOLUMEDOWN' });
+    $('volIcon').textContent = steps > 0 ? '🔊' : '🔉';
+    volSteps += Math.abs(steps);
+    tick();
+  });
+  const volEnd = (e) => {
+    if (volX === null) return;
+    if (e.type === 'pointerup' && !volSteps) { send({ t: 'b', k: 'MUTE' }); tick(); }
+    volX = null;
+    vol.classList.remove('on');
+    $('volIcon').textContent = '🔊';
+  };
+  vol.addEventListener('pointerup', volEnd);
+  vol.addEventListener('pointercancel', volEnd);
+
+  // Channel number pad: type the number, ✓ sends the digits and OK, like the remote.
+  let channel = '';
+  const showChannel = () => { $('chDisplay').textContent = channel; };
+  const closeNumpad = () => { $('numpad').classList.add('hidden'); channel = ''; showChannel(); };
+  $('numBtn').addEventListener('click', () => { keepAwake(); $('numpad').classList.remove('hidden'); });
+  $('numpad').addEventListener('click', (e) => { if (e.target.id === 'numpad') closeNumpad(); });
+  for (const b of $('numpad').querySelectorAll('.keys button')) {
     b.addEventListener('click', () => {
-      keepAwake();
-      send({ t: 'b', k: b.dataset.key });
-      if (navigator.vibrate) navigator.vibrate(8);
+      tick();
+      if (b.id === 'chDel') channel = channel.slice(0, -1);
+      else if (b.id === 'chGo') {
+        if (channel) {
+          for (const d of channel) send({ t: 'b', k: d });
+          send({ t: 'b', k: 'ENTER' });
+        }
+        return closeNumpad();
+      } else if (channel.length < MAX_CHANNEL_DIGITS) channel += b.textContent;
+      showChannel();
     });
   }
 

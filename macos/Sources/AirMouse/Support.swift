@@ -37,6 +37,10 @@ enum Preferences {
     static func tvClientKey(host: String) -> String? { defaults.string(forKey: "tvClientKey." + host) }
     static func setTVClientKey(_ key: String?, host: String) { defaults.set(key, forKey: "tvClientKey." + host) }
 
+    /// The TV's hardware address, learned while it's on, to wake it from standby.
+    static func tvMAC(host: String) -> String? { defaults.string(forKey: "tvMAC." + host) }
+    static func setTVMAC(_ mac: String, host: String) { defaults.set(mac, forKey: "tvMAC." + host) }
+
     /// True only the very first time the app runs.
     static func isFirstLaunch() -> Bool {
         guard !defaults.bool(forKey: "launchedBefore") else { return false }

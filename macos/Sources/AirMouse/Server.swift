@@ -18,7 +18,8 @@ import Network
 ///
 /// With "to":"tv" the same m / c / s messages drive the LG TV's pointer instead (a right
 /// click is the Back key), plus:
-///   {"t":"b","k":"HOME","to":"tv"}   remote control key
+///   {"t":"b","k":"HOME","to":"tv"}   remote control key (also CHANNELUP, VOLUMEDOWN, digits, …)
+///   {"t":"p","to":"tv"}              power: off, or wake the TV from standby
 ///   {"t":"h","to":"tv"}              the TV tab opened: connect to the TV
 ///
 /// Mac → phone: {"t":"tv","s":"connected","m":"TV connected"} whenever the TV link changes.
@@ -346,6 +347,7 @@ final class Server {
             case "c": if msg["b"] as? String == "r" { tv.button("BACK") } else { tv.click() }
             case "s": tv.scroll(dx: number("dx"), dy: number("dy"))
             case "b": if let key = msg["k"] as? String { tv.button(key) }
+            case "p": tv.power()
             case "h":
                 tv.wake()
                 sendTVState(tv.state, to: session)

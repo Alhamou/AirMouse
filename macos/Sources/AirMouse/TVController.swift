@@ -73,14 +73,28 @@ final class TVController: NSObject, URLSessionDelegate {
         }
     }
 
-    /// Remote control key: BACK, HOME, VOLUMEUP, VOLUMEDOWN, …
+    /// Remote control key: BACK, HOME, VOLUMEUP, CHANNELDOWN, digits 0–9, …
     func button(_ name: String) {
         guard Self.buttons.contains(name) else { return }
         send("type:button\nname:\(name)\n\n")
     }
 
     private static let buttons: Set = ["BACK", "HOME", "ENTER", "EXIT", "MENU", "INFO",
-                                       "UP", "DOWN", "LEFT", "RIGHT", "VOLUMEUP", "VOLUMEDOWN", "MUTE"]
+                                       "UP", "DOWN", "LEFT", "RIGHT", "VOLUMEUP", "VOLUMEDOWN", "MUTE",
+                                       "CHANNELUP", "CHANNELDOWN", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+
+    /// Power key: off while connected; otherwise wake the TV over the network (Wake-on-LAN),
+    /// since a TV in standby doesn't answer SSAP.
+    func power() {
+        queue.async {
+            if self.state == .connected { return self.sendNow("type:button\nname:POWER\n\n") }
+            guard let mac = Preferences.tvMAC(host: self.host) else {
+                return self.setState(.failed("Connect once while the TV is on, then it can be woken"))
+            }
+            WakeOnLAN.send(mac: mac)
+            self.lastAttempt = .distantPast  // let the next input reconnect right away
+        }
+    }
 
     /// New TV address: drop the current connection; the next input reconnects.
     func setHost(_ newHost: String) {
@@ -173,6 +187,7 @@ final class TVController: NSObject, URLSessionDelegate {
             watchPointer(task)
             startHeartbeat()
             setState(.connected)
+            rememberMAC()
         case (_, "pointer"):
             disconnect(.failed("TV refused pointer input"))
         default:
@@ -225,6 +240,25 @@ final class TVController: NSObject, URLSessionDelegate {
         DispatchQueue.main.async { self.onStateChanged?(newState) }
     }
 
+    /// Note the TV's hardware address while it's on, for Wake-on-LAN later.
+    private func rememberMAC() {
+        let host = host
+        DispatchQueue.global(qos: .utility).async {
+            let arp = Process()
+            arp.executableURL = URL(fileURLWithPath: "/usr/sbin/arp")
+            arp.arguments = ["-n", host]
+            let pipe = Pipe()
+            arp.standardOutput = pipe
+            guard (try? arp.run()) != nil else { return }
+            arp.waitUntilExit()
+            let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            // "? (192.168.1.51) at 4:b9:e3:1:2:3 on en0 ifscope [ethernet]"
+            guard let word = output.split(separator: " ").drop(while: { $0 != "at" }).dropFirst().first,
+                  WakeOnLAN.bytes(String(word)) != nil else { return }
+            Preferences.setTVMAC(String(word), host: host)
+        }
+    }
+
     // MARK: TLS
 
     /// The TV serves a self-signed certificate. Accept it for the configured TV address only;
@@ -263,5 +297,36 @@ private extension OperationQueue {
         operations.underlyingQueue = queue
         operations.maxConcurrentOperationCount = 1
         return operations
+    }
+}
+
+/// Magic packet that wakes a TV from standby (needs "Turn on via Wi-Fi" / "Mobile TV On" on the TV).
+enum WakeOnLAN {
+    /// "4:b9:e3:1:2:3" → six bytes.
+    static func bytes(_ mac: String) -> [UInt8]? {
+        let parts = mac.split(separator: ":").compactMap { UInt8($0, radix: 16) }
+        return parts.count == 6 ? parts : nil
+    }
+
+    static func send(mac: String) {
+        guard let address = bytes(mac) else { return }
+        let packet = [UInt8](repeating: 0xFF, count: 6) + Array([[UInt8]](repeating: address, count: 16).joined())
+        let fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
+        guard fd >= 0 else { return }
+        defer { close(fd) }
+        var on: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &on, socklen_t(MemoryLayout<Int32>.size))
+        var target = sockaddr_in()
+        target.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        target.sin_family = sa_family_t(AF_INET)
+        target.sin_port = in_port_t(9).bigEndian
+        target.sin_addr.s_addr = INADDR_BROADCAST
+        for _ in 0..<3 {  // UDP may drop one
+            _ = withUnsafePointer(to: &target) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    sendto(fd, packet, packet.count, 0, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+                }
+            }
+        }
     }
 }
