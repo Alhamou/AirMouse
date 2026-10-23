@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b0b0f">
+<meta name="referrer" content="no-referrer">
+<title>AirMouse</title>
+<style>
+  :root {
+    --bg: #0b0b0f; --panel: #16161d; --line: #2a2a35; --text: #e8e8ef;
+    --dim: #8a8a99; --accent: #4f8cff; --ok: #3ecf8e; --bad: #ff5f56;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden; overscroll-behavior: none;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  }
+  body {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+
+  header { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; }
+  #status { display: flex; align-items: center; gap: 8px; color: var(--dim); font-size: 14px; }
+  #dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); transition: background .2s; }
+  #dot.ok { background: var(--ok); }
+  #gear { font-size: 22px; padding: 4px 8px; color: var(--dim); }
+
+  #warn { margin: 0 12px 8px; padding: 10px 14px; border-radius: 12px; background: #3a1d1d; color: #ffb4b0; font-size: 14px; }
+
+  #pad {
+    flex: 1; margin: 0 12px 12px; border: 1px solid var(--line); border-radius: 28px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; color: var(--dim); touch-action: none;
+    transition: background .12s, border-color .12s;
+  }
+  #pad.active { background: #121a2e; border-color: var(--accent); }
+  #pad.click  { background: #1d2b4d; }
+  #pad h1 { margin: 0 0 14px; font-size: 22px; font-weight: 600; color: var(--text); }
+  #pad p  { margin: 4px 0; font-size: 14px; }
+  #pad * { pointer-events: none; }
+
+  .overlay {
+    position: fixed; inset: 0; z-index: 10; background: rgba(11, 11, 15, .97);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 24px; text-align: center;
+  }
+  .hidden { display: none !important; }
+  #start {
+    width: 180px; height: 180px; border-radius: 50%; background: var(--accent);
+    color: #fff; font-size: 28px; font-weight: 600; box-shadow: 0 10px 40px rgba(79, 140, 255, .35);
+  }
+  #start:active { transform: scale(.97); }
+  #intro { color: var(--dim); font-size: 14px; margin-top: 28px; max-width: 300px; }
+  #err { color: var(--bad); font-size: 14px; margin-top: 16px; max-width: 320px; min-height: 1.4em; }
+
+  #sheet { justify-content: flex-end; padding: 0; background: rgba(0, 0, 0, .6); }
+  .panel {
+    width: 100%; max-width: 520px; background: var(--panel); text-align: left;
+    border-radius: 22px 22px 0 0; padding: 20px 22px calc(20px + env(safe-area-inset-bottom));
+  }
+  .panel h2 { margin: 0 0 16px; font-size: 18px; }
+  .field { display: block; margin-bottom: 18px; font-size: 15px; }
+  .field span { float: right; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .field input[type=range] { width: 100%; margin-top: 8px; accent-color: var(--accent); }
+  .check { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 15px; }
+  .check input { width: 20px; height: 20px; accent-color: var(--accent); }
+  .actions { display: flex; justify-content: space-between; align-items: center; margin-top: 18px; }
+  .actions a { color: var(--dim); font-size: 13px; }
+  .btn { padding: 10px 18px; border-radius: 12px; background: var(--line); }
+  .btn.primary { background: var(--accent); color: #fff; }
+</style>
+</head>
+<body>
+
+<header>
+  <div id="status"><div id="dot"></div><span id="statusText">Disconnected</span></div>
+  <button id="gear" aria-label="Settings">⚙︎</button>
+</header>
+
+<div id="warn" class="hidden"></div>
+
+<div id="pad">
+  <h1>Hold to move</h1>
+  <p>Tap = click · Double tap = double click</p>
+  <p>Two-finger tap = right click</p>
+  <p>Two-finger drag = scroll</p>
+</div>
+
+<!-- Start screen: iOS only grants motion access from a user gesture -->
+<div id="startScreen" class="overlay">
+  <button id="start">Start</button>
+  <div id="intro">Hold the phone upright in portrait. Keep a finger on the screen and point to move the cursor.</div>
+  <div id="err"></div>
+</div>
+
+<!-- Settings sheet -->
+<div id="sheet" class="overlay hidden">
+  <div class="panel">
+    <h2>Settings</h2>
+    <label class="field">Sensitivity <span id="v-sens"></span>
+      <input type="range" id="sens" min="5" max="80" step="1"></label>
+    <label class="field">Smoothing <span id="v-smooth"></span>
+      <input type="range" id="smooth" min="0" max="0.9" step="0.05"></label>
+    <label class="field">Dead zone <span id="v-dead"></span>
+      <input type="range" id="dead" min="0" max="10" step="0.5"></label>
+    <label class="check"><input type="checkbox" id="invX"> Invert horizontal</label>
+    <label class="check"><input type="checkbox" id="invY"> Invert vertical</label>
+    <label class="check"><input type="checkbox" id="invScroll"> Invert scroll</label>
+    <div class="actions">
+      <button id="reset" class="btn">Reset</button>
+      <a href="/cert">Root certificate</a>
+      <button id="done" class="btn primary">Done</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------- settings
+  const DEFAULTS = {
+    sens: 25,         // cursor pixels per degree of rotation
+    smooth: 0.4,      // low-pass filter strength (0 = off, 0.9 = very smooth)
+    dead: 1.5,        // dead zone in deg/s (removes hand tremor)
+    invX: false, invY: false, invScroll: false,
+  };
+  const STORE_KEY = 'airmouse.settings';
+  let S = { ...DEFAULTS };
+  try { Object.assign(S, JSON.parse(localStorage.getItem(STORE_KEY) || '{}')); } catch {}
+  const save = () => localStorage.setItem(STORE_KEY, JSON.stringify(S));
+
+  // ---------------------------------------------------------------- tuning
+  const SEND_MS = 16;          // ~60 Hz send rate
+  const TAP_MS = 200;          // max duration of a tap
+  const TAP_MOVE_PX = 10;      // max finger travel for a tap
+  const DOUBLE_TAP_MS = 350;   // max gap between taps of a double tap
+  const DOUBLE_TAP_PX = 40;
+  const GUARD_PX = 25;         // cursor travel that ends the tap guard early
+  const SCROLL_GAIN = 1.5;     // finger px -> scroll px
+
+  const $ = (id) => document.getElementById(id);
+  const pad = $('pad');
+
+  // ---------------------------------------------------------------- websocket
+  const token = new URLSearchParams(location.search).get('t') || '';
+  let ws = null, retry = 0;
+
+  function connect() {
+    ws = new WebSocket(`wss://${location.host}/ws?t=${encodeURIComponent(token)}`);
+    ws.onopen = () => { retry = 0; setStatus(true); };
+    ws.onclose = () => {
+      setStatus(false);
+      setTimeout(connect, Math.min(5000, 300 * 2 ** retry++));  // backoff reconnect
+    };
+  }
+  const isOpen = () => ws && ws.readyState === WebSocket.OPEN;
+
+  // droppable=true: skip if the socket is congested (the caller keeps the delta and retries)
+  function send(obj, droppable = false) {
+    if (!isOpen() || (droppable && ws.bufferedAmount > 512)) return false;
+    ws.send(JSON.stringify(obj));
+    return true;
+  }
+
+  function setStatus(ok) {
+    $('dot').classList.toggle('ok', ok);
+    $('statusText').textContent = ok ? 'Connected' : 'Connecting…';
+  }
+
+  // ---------------------------------------------------------------- motion
+  let touching = false;        // a finger is on the pad
+  let mode = 'move';           // 'move' (one finger) | 'scroll' (two fingers)
+  let gy = 9.8, gz = 0;        // low-passed gravity in device coordinates
+  let fx = 0, fy = 0;          // smoothed angular rates (deg/s)
+  let accX = 0, accY = 0;      // pending cursor movement (px, fractional)
+  let accS = 0;                // pending scroll (px)
+  let lastT = 0, gotMotion = false;
+
+  // Soft dead zone: rates below the threshold become 0, above it they grow from 0 (no jump).
+  const deadZone = (v) => Math.sign(v) * Math.max(0, Math.abs(v) - S.dead);
+
+  function onMotion(e) {
+    const r = e.rotationRate;
+    if (!r || r.alpha == null) return;
+    gotMotion = true;
+
+    const now = performance.now();
+    const dt = lastT ? Math.min((now - lastT) / 1000, 0.1) : 0;
+    lastT = now;
+
+    // Track gravity (slow low-pass) so we know how the phone is tilted.
+    const g = e.accelerationIncludingGravity;
+    if (g && g.y != null) { gy += 0.1 * (g.y - gy); gz += 0.1 * (g.z - gz); }
+
+    if (!touching || mode !== 'move') return;
+
+    // Device axes: x = right, y = up along the screen, z = out of the screen.
+    // Yaw (turning left/right) is rotation around the world's vertical axis:
+    //   phone upright -> device y (gamma); phone flat -> device z (alpha).
+    // Blending by the gravity direction keeps left/right correct at any forward tilt.
+    // Absolute values make this independent of platform sign conventions for gravity.
+    const n = Math.hypot(gy, gz) || 1;
+    const yaw = (r.gamma * Math.abs(gy) + r.alpha * Math.abs(gz)) / n;
+    const pitch = r.beta;  // tilting up/down is rotation around device x in both poses
+
+    // Positive yaw = turning left, positive pitch = aiming up; screen y grows downward.
+    const vx = -yaw * (S.invX ? -1 : 1);
+    const vy = -pitch * (S.invY ? -1 : 1);
+
+    // Low-pass filter (exponential moving average), then dead zone.
+    const k = 1 - S.smooth;
+    fx += k * (vx - fx);
+    fy += k * (vy - fy);
+    accX += deadZone(fx) * dt * S.sens;
+    accY += deadZone(fy) * dt * S.sens;
+  }
+
+  // ---------------------------------------------------------------- send loop
+  let guard = false;  // tap guard active: motion is held back until we know it's not a tap
+  let downT = 0;
+
+  setInterval(() => {
+    if (!touching) return;
+    if (!isOpen()) { accX = accY = accS = 0; return; }  // avoid a jump after reconnecting
+
+    if (mode === 'move') {
+      // Hold motion back briefly so the tiny jolt of tapping doesn't move the cursor
+      // before the click. Released as soon as the touch is clearly not a tap.
+      if (guard && performance.now() - downT < TAP_MS && Math.hypot(accX, accY) < GUARD_PX) return;
+      guard = false;
+      const dx = Math.trunc(accX), dy = Math.trunc(accY);  // whole pixels; keep the remainder
+      if ((dx || dy) && send({ t: 'm', dx, dy }, true)) { accX -= dx; accY -= dy; }
+    } else {
+      const s = Math.trunc(accS);
+      if (s && send({ t: 's', dy: s }, true)) accS -= s;
+    }
+  }, SEND_MS);
+
+  // ---------------------------------------------------------------- touch
+  let startX = 0, startY = 0, moved = 0, maxTouches = 0, lastScrollY = 0;
+  let lastTap = { t: 0, x: 0, y: 0 };
+
+  const avgY = (ts) => (ts[0].clientY + ts[1].clientY) / 2;
+
+  pad.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const ts = e.touches;
+    if (!touching) {  // first finger down: begin a new gesture
+      touching = true; mode = 'move'; guard = true;
+      downT = performance.now();
+      startX = ts[0].clientX; startY = ts[0].clientY;
+      moved = 0; maxTouches = 0;
+      fx = fy = accX = accY = accS = 0;
+      pad.classList.add('active');
+    }
+    maxTouches = Math.max(maxTouches, ts.length);
+    if (ts.length >= 2) {  // second finger: switch to scrolling, pause pointing
+      mode = 'scroll';
+      accX = accY = 0;
+      lastScrollY = avgY(ts);
+    }
+  }, { passive: false });
+
+  pad.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    const ts = e.touches;
+    if (mode === 'scroll') {
+      if (ts.length < 2) return;
+      const y = avgY(ts), d = y - lastScrollY;
+      lastScrollY = y;
+      moved += Math.abs(d);
+      // Finger moves up -> content moves up (like a touchscreen).
+      accS += d * SCROLL_GAIN * (S.invScroll ? -1 : 1);
+    } else {
+      moved = Math.max(moved, Math.hypot(ts[0].clientX - startX, ts[0].clientY - startY));
+    }
+  }, { passive: false });
+
+  function onTouchEnd(e) {
+    e.preventDefault();
+    if (e.touches.length) {  // some fingers still down
+      if (e.touches.length >= 2) lastScrollY = avgY(e.touches);
+      return;
+    }
+    // All fingers lifted: stop sending immediately; the cursor stays where it is.
+    touching = false;
+    accX = accY = accS = 0;
+    pad.classList.remove('active');
+    if (e.type === 'touchcancel') return;
+
+    const dur = performance.now() - downT;
+    if (mode === 'move' && guard && dur < TAP_MS && moved < TAP_MOVE_PX) {
+      leftTap(startX, startY);
+    } else if (mode === 'scroll' && maxTouches === 2 && dur < TAP_MS * 1.5 && moved < TAP_MOVE_PX) {
+      send({ t: 'c', b: 'r', n: 1 });
+      flash();
+    }
+  }
+  pad.addEventListener('touchend', onTouchEnd, { passive: false });
+  pad.addEventListener('touchcancel', onTouchEnd, { passive: false });
+
+  // Send the first click right away; a quick second tap is sent as click #2,
+  // which macOS treats as a double click (no delay on single clicks).
+  function leftTap(x, y) {
+    const now = performance.now();
+    const isDouble = now - lastTap.t < DOUBLE_TAP_MS && Math.hypot(x - lastTap.x, y - lastTap.y) < DOUBLE_TAP_PX;
+    send({ t: 'c', b: 'l', n: isDouble ? 2 : 1 });
+    lastTap = isDouble ? { t: 0, x: 0, y: 0 } : { t: now, x, y };
+    flash();
+  }
+
+  function flash() {
+    pad.classList.add('click');
+    setTimeout(() => pad.classList.remove('click'), 90);
+    if (navigator.vibrate) navigator.vibrate(8);  // Android only; iOS ignores it
+  }
+
+  // ---------------------------------------------------------------- start
+  let wakeLock = null, started = false;
+
+  async function keepAwake() {
+    try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
+  }
+
+  function warn(text) {
+    $('warn').textContent = text;
+    $('warn').classList.toggle('hidden', !text);
+  }
+
+  $('start').addEventListener('click', async () => {
+    const err = $('err');
+    err.textContent = '';
+    if (!window.isSecureContext) {
+      err.textContent = 'Motion sensors require HTTPS. Open the https:// link from the QR code.';
+      return;
+    }
+    // iOS 13+: permission must be requested from a user gesture.
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+      try {
+        if (await DeviceMotionEvent.requestPermission() !== 'granted') {
+          err.textContent = 'Motion access denied. Close Safari completely (swipe it away), reopen this page, tap Start and choose "Allow".';
+          return;
+        }
+      } catch (ex) {
+        err.textContent = 'Could not request motion access: ' + ex.message;
+        return;
+      }
+    }
+    window.addEventListener('devicemotion', onMotion);
+    started = true;
+    connect();
+    keepAwake();
+    $('startScreen').classList.add('hidden');
+    setTimeout(() => {
+      if (!gotMotion) warn('No gyroscope data. Check motion permissions for this site (see README → Troubleshooting).');
+    }, 1500);
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') { if (started) keepAwake(); }
+    else { touching = false; pad.classList.remove('active'); }  // never leave a gesture stuck
+  });
+
+  // ---------------------------------------------------------------- settings UI
+  const RANGE_FMT = { sens: (v) => v, smooth: (v) => Math.round(v * 100) + '%', dead: (v) => v + '°/s' };
+
+  function renderSettings() {
+    for (const k of Object.keys(DEFAULTS)) {
+      const el = $(k);
+      if (el.type === 'checkbox') el.checked = S[k];
+      else { el.value = S[k]; $('v-' + k).textContent = RANGE_FMT[k](S[k]); }
+    }
+  }
+
+  for (const k of Object.keys(DEFAULTS)) {
+    $(k).addEventListener('input', (e) => {
+      const el = e.target;
+      S[k] = el.type === 'checkbox' ? el.checked : Number(el.value);
+      if (el.type !== 'checkbox') $('v-' + k).textContent = RANGE_FMT[k](S[k]);
+      save();
+    });
+  }
+
+  $('gear').addEventListener('click', () => { renderSettings(); $('sheet').classList.remove('hidden'); });
+  $('done').addEventListener('click', () => $('sheet').classList.add('hidden'));
+  $('sheet').addEventListener('click', (e) => { if (e.target.id === 'sheet') $('sheet').classList.add('hidden'); });
+  $('reset').addEventListener('click', () => { S = { ...DEFAULTS }; save(); renderSettings(); });
+})();
+</script>
+</body>
+</html>
