@@ -1,6 +1,6 @@
 # AirMouse Mac
 
-Use your iPhone as a gyroscope **air mouse** for your Mac over the local Wi-Fi.
+Use your iPhone as a gyroscope **air mouse** or a full-screen **trackpad** for your Mac over the local Wi-Fi.
 There's no app to install: the phone opens a web page served by a small Python server on the Mac.
 
 - **Local only.** There's no domain, no cloud and no internet access. Everything runs on your LAN.
@@ -99,7 +99,10 @@ Notes:
 ## 5. Use it
 
 1. Open the URL from the QR code and tap **Start**, then tap **Allow** for *Motion & Orientation*.
-2. Hold the phone **upright in portrait**, the way you'd hold it to read it.
+2. Use the tabs at the top to switch between **Air Mouse** and **Trackpad**. The phone remembers your choice.
+
+### Air Mouse tab
+Hold the phone **upright in portrait**, the way you'd hold it to read it.
 
 | Gesture                              | Action                                          |
 |--------------------------------------|-------------------------------------------------|
@@ -110,13 +113,36 @@ Notes:
 | Two-finger tap                       | right click                                     |
 | Two-finger drag up/down              | scroll                                          |
 
+### Trackpad tab
+The whole screen, edge to edge, works like a Magic Trackpad. It doesn't need motion permission.
+
+| Gesture                                  | Action                                         |
+|------------------------------------------|------------------------------------------------|
+| Slide one finger                         | moves the cursor (with acceleration)           |
+| Tap                                      | left click                                     |
+| Two quick taps                           | double click                                   |
+| Tap, then touch again and slide / hold   | drag (the button is released when you lift)    |
+| Two-finger slide (any direction)         | scroll, with momentum after a flick            |
+| Two-finger tap                           | right click                                    |
+| Three-finger swipe left / right          | next / previous desktop (or full-screen app)   |
+| Three-finger swipe up                    | Mission Control (swipe down closes it)         |
+| Three-finger swipe down                  | App Exposé, the current app's windows (swipe up closes it) |
+
+Three-finger swipes also work in the Air Mouse tab. They send the standard macOS shortcuts
+(Ctrl+←/→, Ctrl+↑, Ctrl+↓). Those must stay enabled in **System Settings → Keyboard →
+Keyboard Shortcuts → Mission Control** ("Mission Control", "Application windows",
+"Move left/right a space"). They're on by default.
+
 Tip: tap **Share → Add to Home Screen** for a full-screen launcher.
 
 ### Settings (⚙︎, saved on the phone)
 - **Sensitivity**: how many cursor pixels one degree of rotation moves (5–80).
 - **Smoothing**: low-pass filter strength. Raise it if the cursor jitters, lower it if the cursor lags.
 - **Dead zone**: ignores rotation below this speed (°/s), which removes hand tremor when you hold still.
-- **Invert horizontal / vertical / scroll**.
+- **Invert horizontal / vertical**.
+- **Tracking speed** (Trackpad): base cursor speed. Fast swipes are accelerated on top of this.
+- **Scroll momentum** (Trackpad): keep scrolling after a two-finger flick.
+- **Invert scroll** (both modes).
 
 ## Troubleshooting
 
@@ -145,6 +171,10 @@ Tip: tap **Share → Add to Home Screen** for a full-screen launcher.
 **Cursor doesn't move but the status says Connected**
 - Accessibility permission is missing for the app running the server (see section 2), or you didn't restart the server after granting it.
 
+**Three-finger swipe does nothing**
+- Check that the Mission Control shortcuts above are enabled. To switch desktops you need at least two
+  (Mission Control → **+** at the top right).
+
 **Left/right feels reversed or the axes are mixed up**
 - Hold the phone upright in portrait. If a direction still feels wrong, use **Invert horizontal / vertical** in settings.
 
@@ -155,7 +185,9 @@ One JSON object per WebSocket text message (phone → Mac):
 ```json
 {"t":"m","dx":3,"dy":-2}     // move by whole pixels (deltas batched at ~60 Hz)
 {"t":"c","b":"l","n":1}      // click: b = "l" | "r", n = 2 for the second click of a double click
-{"t":"s","dy":-12}           // scroll in pixels
+{"t":"d","s":1}              // hold (1) / release (0) the left button, for dragging
+{"t":"s","dx":0,"dy":-12}    // scroll in pixels (vertical + horizontal)
+{"t":"g","d":"l"}            // three-finger swipe: d = "l" | "r" | "u" | "d"
 ```
 
 ## Security notes

@@ -2,12 +2,14 @@
 """AirMouse Mac — use an iPhone as a gyroscope air mouse for macOS.
 
 Serves the mobile control page over HTTPS and receives compact JSON messages
-over a WebSocket, which are turned into Quartz (CoreGraphics) mouse events.
+over a WebSocket, which are turned into Quartz (CoreGraphics) mouse/keyboard events.
 
 Protocol (phone -> Mac), one JSON object per WebSocket text frame:
     {"t":"m","dx":3,"dy":-2}     move cursor by a relative amount (pixels)
     {"t":"c","b":"l","n":1}      click; b = "l" | "r", n = 2 for the 2nd click of a double click
-    {"t":"s","dy":-12}           scroll by pixels (positive = content moves down)
+    {"t":"d","s":1}              press (s=1) / release (s=0) the left button, for dragging
+    {"t":"s","dx":0,"dy":-12}    scroll by pixels (positive = content moves down / right)
+    {"t":"g","d":"l"}            three-finger swipe; d = "l" | "r" | "u" | "d"
 """
 from __future__ import annotations
 
@@ -48,6 +50,7 @@ class Mouse:
 
     def __init__(self) -> None:
         self.displays: list = []
+        self.dragging = False  # left button held down (trackpad tap-and-drag)
         self.refresh_displays()
 
     def refresh_displays(self) -> None:
@@ -75,7 +78,18 @@ class Mouse:
     def move(self, dx: float, dy: float) -> None:
         cur = self.position()
         pos = self._clamp(cur.x + dx, cur.y + dy, cur)
-        ev = Quartz.CGEventCreateMouseEvent(None, Quartz.kCGEventMouseMoved, pos, Quartz.kCGMouseButtonLeft)
+        # While the button is held, apps expect "dragged" events instead of "moved".
+        etype = Quartz.kCGEventLeftMouseDragged if self.dragging else Quartz.kCGEventMouseMoved
+        ev = Quartz.CGEventCreateMouseEvent(None, etype, pos, Quartz.kCGMouseButtonLeft)
+        Quartz.CGEventPost(Quartz.kCGHIDEventTap, ev)
+
+    def hold(self, down: bool) -> None:
+        """Press or release the left button (start / end a drag)."""
+        if down == self.dragging:
+            return
+        self.dragging = down
+        etype = Quartz.kCGEventLeftMouseDown if down else Quartz.kCGEventLeftMouseUp
+        ev = Quartz.CGEventCreateMouseEvent(None, etype, self.position(), Quartz.kCGMouseButtonLeft)
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, ev)
 
     def click(self, button: str = "l", count: int = 1) -> None:
@@ -88,9 +102,56 @@ class Mouse:
             Quartz.CGEventSetIntegerValueField(ev, Quartz.kCGMouseEventClickState, count)
             Quartz.CGEventPost(Quartz.kCGHIDEventTap, ev)
 
-    def scroll(self, dy: int) -> None:
-        ev = Quartz.CGEventCreateScrollWheelEvent(None, Quartz.kCGScrollEventUnitPixel, 1, dy)
+    def scroll(self, dy: int, dx: int = 0) -> None:
+        ev = Quartz.CGEventCreateScrollWheelEvent(None, Quartz.kCGScrollEventUnitPixel, 2, dy, dx)
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, ev)
+
+
+# --------------------------------------------------------------------------- #
+# Desktop gestures (three-finger swipes)
+# --------------------------------------------------------------------------- #
+KEY_LEFT, KEY_RIGHT, KEY_DOWN, KEY_UP = 123, 124, 125, 126
+
+
+class Desktop:
+    """Three-finger swipes, like the macOS trackpad defaults.
+
+    Real trackpad gestures can't be synthesized with public APIs, so we send the
+    default Mission Control shortcuts instead (System Settings → Keyboard →
+    Keyboard Shortcuts → Mission Control):
+        swipe left / right  ->  Ctrl+→ / Ctrl+←   move to the next / previous desktop
+        swipe up            ->  Ctrl+↑            Mission Control
+        swipe down          ->  Ctrl+↓            App Exposé (current app's windows)
+    Like on a trackpad, swiping the other way closes an open overview.
+    """
+
+    def __init__(self) -> None:
+        self.overview_key: int | None = None  # key that opened the current overview, if any
+
+    @staticmethod
+    def _press(keycode: int) -> None:
+        # Arrow keys carry the Fn flag; the system shortcuts are registered with it.
+        flags = Quartz.kCGEventFlagMaskControl | Quartz.kCGEventFlagMaskSecondaryFn
+        for down in (True, False):
+            ev = Quartz.CGEventCreateKeyboardEvent(None, keycode, down)
+            Quartz.CGEventSetFlags(ev, flags)
+            Quartz.CGEventPost(Quartz.kCGHIDEventTap, ev)
+
+    def swipe(self, direction: str) -> None:
+        if direction in ("l", "r"):
+            # Content follows the fingers: swiping left reveals the desktop on the right.
+            self._press(KEY_RIGHT if direction == "l" else KEY_LEFT)
+        elif direction in ("u", "d"):
+            if self.overview_key is not None:
+                self._press(self.overview_key)  # the shortcut toggles, so this closes it
+                self.overview_key = None
+            else:
+                self.overview_key = KEY_UP if direction == "u" else KEY_DOWN
+                self._press(self.overview_key)
+
+    def clicked(self) -> None:
+        """A click picks a window in Mission Control / App Exposé, which closes it."""
+        self.overview_key = None
 
 
 def _num(value) -> float:
@@ -101,20 +162,25 @@ def _num(value) -> float:
     return max(-MAX_DELTA, min(MAX_DELTA, v))
 
 
-def handle_message(mouse: Mouse, msg: dict) -> None:
+def handle_message(mouse: Mouse, desktop: Desktop, msg: dict) -> None:
     t = msg.get("t")
     if t == "m":
         mouse.move(_num(msg.get("dx", 0)), _num(msg.get("dy", 0)))
     elif t == "c":
         mouse.click("r" if msg.get("b") == "r" else "l", 2 if msg.get("n") == 2 else 1)
+        desktop.clicked()
+    elif t == "d":
+        mouse.hold(msg.get("s") == 1)
     elif t == "s":
-        mouse.scroll(int(_num(msg.get("dy", 0))))
+        mouse.scroll(int(_num(msg.get("dy", 0))), int(_num(msg.get("dx", 0))))
+    elif t == "g":
+        desktop.swipe(str(msg.get("d")))
 
 
 # --------------------------------------------------------------------------- #
 # Web app
 # --------------------------------------------------------------------------- #
-def make_app(token: str, mouse: Mouse) -> web.Application:
+def make_app(token: str, mouse: Mouse, desktop: Desktop) -> web.Application:
     def authorized(request: web.Request) -> bool:
         given = request.query.get("t", "")
         return secrets.compare_digest(given.encode(), token.encode())
@@ -151,10 +217,11 @@ def make_app(token: str, mouse: Mouse) -> web.Application:
                 try:
                     data = json.loads(msg.data)
                     if isinstance(data, dict):
-                        handle_message(mouse, data)
+                        handle_message(mouse, desktop, data)
                 except (ValueError, TypeError):
                     pass  # ignore malformed messages
         finally:
+            mouse.hold(False)  # never leave the button stuck down if the phone drops off
             print(f"[-] phone disconnected: {request.remote}")
         return ws
 
@@ -244,7 +311,7 @@ def main() -> None:
     print("  Ctrl+C to stop.\n")
 
     web.run_app(
-        make_app(token, Mouse()),
+        make_app(token, Mouse(), Desktop()),
         host=args.host,
         port=args.port,
         ssl_context=ssl_ctx,

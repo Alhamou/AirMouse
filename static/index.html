@@ -26,14 +26,24 @@
   }
   button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
 
-  header { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; }
-  #status { display: flex; align-items: center; gap: 8px; color: var(--dim); font-size: 14px; }
-  #dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); transition: background .2s; }
+  /* Header and banner float above the pad; only their controls catch touches. */
+  header, #warn { position: relative; z-index: 1; pointer-events: none; }
+  header > * { pointer-events: auto; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; }
+  #status { display: flex; align-items: center; gap: 8px; color: var(--dim); font-size: 13px; min-width: 0; }
+  #statusText { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #dot { width: 10px; height: 10px; flex: none; border-radius: 50%; background: var(--bad); transition: background .2s; }
   #dot.ok { background: var(--ok); }
   #gear { font-size: 22px; padding: 4px 8px; color: var(--dim); }
 
+  /* Mode tabs (segmented control) */
+  #tabs { display: flex; padding: 3px; border-radius: 10px; background: rgba(255, 255, 255, .07); }
+  #tabs button { padding: 6px 12px; border-radius: 8px; font-size: 14px; color: var(--dim); transition: background .15s, color .15s; }
+  #tabs button.on { background: rgba(255, 255, 255, .16); color: var(--text); }
+
   #warn { margin: 0 12px 8px; padding: 10px 14px; border-radius: 12px; background: #3a1d1d; color: #ffb4b0; font-size: 14px; }
 
+  /* Touch surface — Air Mouse: framed card */
   #pad {
     flex: 1; margin: 0 12px 12px; border: 1px solid var(--line); border-radius: 28px;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -45,6 +55,18 @@
   #pad h1 { margin: 0 0 14px; font-size: 22px; font-weight: 600; color: var(--text); }
   #pad p  { margin: 4px 0; font-size: 14px; }
   #pad * { pointer-events: none; }
+
+  /* Touch surface — Trackpad: 100% of the screen, edge to edge, like a Magic Trackpad */
+  body.trackpad #pad {
+    position: fixed; inset: 0; z-index: 0; margin: 0; border: 0; border-radius: 0;
+    background: radial-gradient(120% 90% at 50% 40%, #1e1e25 0%, #141418 60%, #0f0f12 100%);
+  }
+  body.trackpad #pad.active { background: radial-gradient(120% 90% at 50% 40%, #23232b 0%, #17171c 60%, #111115 100%); }
+  body.trackpad #pad.click  { background: #26262e; }
+  body.trackpad #pad h1, body.trackpad #pad p { opacity: .45; }
+  body.trackpad #pad.active h1, body.trackpad #pad.active p { opacity: 0; transition: opacity .3s; }
+  .hint-pad, body.trackpad .hint-air { display: none; }
+  body.trackpad .hint-pad { display: block; }
 
   .overlay {
     position: fixed; inset: 0; z-index: 10; background: rgba(11, 11, 15, .97);
@@ -62,10 +84,11 @@
 
   #sheet { justify-content: flex-end; padding: 0; background: rgba(0, 0, 0, .6); }
   .panel {
-    width: 100%; max-width: 520px; background: var(--panel); text-align: left;
+    width: 100%; max-width: 520px; max-height: 90%; overflow-y: auto; background: var(--panel); text-align: left;
     border-radius: 22px 22px 0 0; padding: 20px 22px calc(20px + env(safe-area-inset-bottom));
   }
   .panel h2 { margin: 0 0 16px; font-size: 18px; }
+  .panel h3 { margin: 6px 0 12px; font-size: 13px; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: .04em; }
   .field { display: block; margin-bottom: 18px; font-size: 15px; }
   .field span { float: right; color: var(--dim); font-variant-numeric: tabular-nums; }
   .field input[type=range] { width: 100%; margin-top: 8px; accent-color: var(--accent); }
@@ -80,23 +103,37 @@
 <body>
 
 <header>
-  <div id="status"><div id="dot"></div><span id="statusText">Disconnected</span></div>
+  <div id="status"><div id="dot"></div><span id="statusText">Offline</span></div>
+  <nav id="tabs">
+    <button data-input="air">Air Mouse</button>
+    <button data-input="pad">Trackpad</button>
+  </nav>
   <button id="gear" aria-label="Settings">⚙︎</button>
 </header>
 
 <div id="warn" class="hidden"></div>
 
 <div id="pad">
-  <h1>Hold to move</h1>
-  <p>Tap = click · Double tap = double click</p>
-  <p>Two-finger tap = right click</p>
-  <p>Two-finger drag = scroll</p>
+  <div class="hint-air">
+    <h1>Hold to move</h1>
+    <p>Tap = click · Double tap = double click</p>
+    <p>Two-finger tap = right click</p>
+    <p>Two-finger drag = scroll</p>
+    <p>Three-finger swipe = desktops / Mission Control</p>
+  </div>
+  <div class="hint-pad">
+    <h1>Trackpad</h1>
+    <p>Slide one finger to move</p>
+    <p>Tap = click · Tap, then touch &amp; slide = drag</p>
+    <p>Two fingers = scroll · Two-finger tap = right click</p>
+    <p>Three fingers ← → = desktops · ↑ Mission Control · ↓ App windows</p>
+  </div>
 </div>
 
 <!-- Start screen: iOS only grants motion access from a user gesture -->
 <div id="startScreen" class="overlay">
   <button id="start">Start</button>
-  <div id="intro">Hold the phone upright in portrait. Keep a finger on the screen and point to move the cursor.</div>
+  <div id="intro">Air Mouse: hold the phone upright and keep a finger on the screen while you point.<br>Trackpad: use the whole screen like a Magic Trackpad.</div>
   <div id="err"></div>
 </div>
 
@@ -104,6 +141,7 @@
 <div id="sheet" class="overlay hidden">
   <div class="panel">
     <h2>Settings</h2>
+    <h3>Air Mouse</h3>
     <label class="field">Sensitivity <span id="v-sens"></span>
       <input type="range" id="sens" min="5" max="80" step="1"></label>
     <label class="field">Smoothing <span id="v-smooth"></span>
@@ -112,6 +150,11 @@
       <input type="range" id="dead" min="0" max="10" step="0.5"></label>
     <label class="check"><input type="checkbox" id="invX"> Invert horizontal</label>
     <label class="check"><input type="checkbox" id="invY"> Invert vertical</label>
+    <h3>Trackpad</h3>
+    <label class="field">Tracking speed <span id="v-padSpeed"></span>
+      <input type="range" id="padSpeed" min="0.5" max="4" step="0.1"></label>
+    <label class="check"><input type="checkbox" id="momentum"> Scroll momentum</label>
+    <h3>Both</h3>
     <label class="check"><input type="checkbox" id="invScroll"> Invert scroll</label>
     <div class="actions">
       <button id="reset" class="btn">Reset</button>
@@ -127,10 +170,14 @@
 
   // ---------------------------------------------------------------- settings
   const DEFAULTS = {
-    sens: 25,         // cursor pixels per degree of rotation
-    smooth: 0.4,      // low-pass filter strength (0 = off, 0.9 = very smooth)
-    dead: 1.5,        // dead zone in deg/s (removes hand tremor)
-    invX: false, invY: false, invScroll: false,
+    input: 'air',     // 'air' (gyroscope) | 'pad' (full-screen trackpad)
+    sens: 25,         // air: cursor pixels per degree of rotation
+    smooth: 0.4,      // air: low-pass filter strength (0 = off, 0.9 = very smooth)
+    dead: 1.5,        // air: dead zone in deg/s (removes hand tremor)
+    invX: false, invY: false,
+    padSpeed: 1.5,    // trackpad: base cursor px per finger px (before acceleration)
+    momentum: true,   // trackpad: keep scrolling after a two-finger flick
+    invScroll: false,
   };
   const STORE_KEY = 'airmouse.settings';
   let S = { ...DEFAULTS };
@@ -141,10 +188,14 @@
   const SEND_MS = 16;          // ~60 Hz send rate
   const TAP_MS = 200;          // max duration of a tap
   const TAP_MOVE_PX = 10;      // max finger travel for a tap
-  const DOUBLE_TAP_MS = 350;   // max gap between taps of a double tap
+  const DOUBLE_TAP_MS = 350;   // max gap between taps of a double tap (and tap-and-drag)
   const DOUBLE_TAP_PX = 40;
-  const GUARD_PX = 25;         // cursor travel that ends the tap guard early
+  const GUARD_PX = 25;         // air mouse: cursor travel that ends the tap guard early
+  const SLOP_PX = 8;           // trackpad: finger travel ignored before pointing starts
   const SCROLL_GAIN = 1.5;     // finger px -> scroll px
+  const PAD_ACCEL = 1.5;       // trackpad pointer acceleration (gain grows with finger speed)
+  const FRICTION = 0.94;       // scroll momentum decay per frame
+  const SWIPE_PX = 50;         // three-finger travel that triggers a desktop swipe
 
   const $ = (id) => document.getElementById(id);
   const pad = $('pad');
@@ -175,13 +226,37 @@
     $('statusText').textContent = ok ? 'Connected' : 'Connecting…';
   }
 
-  // ---------------------------------------------------------------- motion
+  // ---------------------------------------------------------------- input mode tabs
+  let motionOk = true;  // motion permission granted (only matters for Air Mouse)
+
+  function setInput(input) {
+    S.input = input;
+    save();
+    document.body.classList.toggle('trackpad', input === 'pad');
+    for (const b of $('tabs').children) b.classList.toggle('on', b.dataset.input === input);
+    endGesture();
+    warn(input === 'air' && !motionOk
+      ? 'Motion access denied — Air Mouse needs it. Close Safari completely, reopen and tap Allow. Trackpad still works.'
+      : '');
+  }
+  $('tabs').addEventListener('click', (e) => { if (e.target.dataset.input) setInput(e.target.dataset.input); });
+
+  // ---------------------------------------------------------------- shared gesture state
   let touching = false;        // a finger is on the pad
-  let mode = 'move';           // 'move' (one finger) | 'scroll' (two fingers)
+  let mode = 'move';           // 'move' (1 finger) | 'scroll' (2 fingers) | 'swipe' (3 fingers)
+  let accX = 0, accY = 0;      // pending cursor movement (px, fractional)
+  let accSX = 0, accSY = 0;    // pending scroll (px)
+  let mvx = 0, mvy = 0;        // scroll momentum (px per frame)
+  let guard = false;           // air mouse tap guard: motion held back until we know it's not a tap
+  let panning = false;         // trackpad: finger has moved past the touch slop
+  let speed = 0;               // trackpad: smoothed finger speed (px/ms) for acceleration
+  let downT = 0;
+  let dragArmed = false;       // trackpad: touch began right after a tap -> may become a drag
+  let dragging = false;        // left button is held on the Mac
+
+  // ---------------------------------------------------------------- air mouse (gyroscope)
   let gy = 9.8, gz = 0;        // low-passed gravity in device coordinates
   let fx = 0, fy = 0;          // smoothed angular rates (deg/s)
-  let accX = 0, accY = 0;      // pending cursor movement (px, fractional)
-  let accS = 0;                // pending scroll (px)
   let lastT = 0, gotMotion = false;
 
   // Soft dead zone: rates below the threshold become 0, above it they grow from 0 (no jump).
@@ -200,7 +275,7 @@
     const g = e.accelerationIncludingGravity;
     if (g && g.y != null) { gy += 0.1 * (g.y - gy); gz += 0.1 * (g.z - gz); }
 
-    if (!touching || mode !== 'move') return;
+    if (!touching || mode !== 'move' || S.input !== 'air') return;
 
     // Device axes: x = right, y = up along the screen, z = out of the screen.
     // Yaw (turning left/right) is rotation around the world's vertical axis:
@@ -224,88 +299,171 @@
   }
 
   // ---------------------------------------------------------------- send loop
-  let guard = false;  // tap guard active: motion is held back until we know it's not a tap
-  let downT = 0;
-
   setInterval(() => {
-    if (!touching) return;
-    if (!isOpen()) { accX = accY = accS = 0; return; }  // avoid a jump after reconnecting
+    if (!isOpen()) { accX = accY = accSX = accSY = mvx = mvy = 0; return; }  // no jump after reconnect
 
-    if (mode === 'move') {
-      // Hold motion back briefly so the tiny jolt of tapping doesn't move the cursor
-      // before the click. Released as soon as the touch is clearly not a tap.
-      if (guard && performance.now() - downT < TAP_MS && Math.hypot(accX, accY) < GUARD_PX) return;
-      guard = false;
+    if (touching && mode === 'move') {
+      if (S.input === 'air') {
+        // Hold motion back briefly so the tiny jolt of a tap doesn't move the cursor
+        // before the click. Released as soon as the touch is clearly not a tap.
+        if (guard && performance.now() - downT < TAP_MS && Math.hypot(accX, accY) < GUARD_PX) return;
+        guard = false;
+      } else if (dragArmed && (panning || performance.now() - downT >= TAP_MS)) {
+        // Trackpad tap-and-drag: the second touch moved or is held, so press the button.
+        dragArmed = false;
+        dragging = send({ t: 'd', s: 1 });
+      }
       const dx = Math.trunc(accX), dy = Math.trunc(accY);  // whole pixels; keep the remainder
       if ((dx || dy) && send({ t: 'm', dx, dy }, true)) { accX -= dx; accY -= dy; }
-    } else {
-      const s = Math.trunc(accS);
-      if (s && send({ t: 's', dy: s }, true)) accS -= s;
     }
+
+    // Two-finger flick keeps scrolling with friction, like a Magic Trackpad.
+    if (!touching && (mvx || mvy)) {
+      accSX += mvx; accSY += mvy;
+      mvx *= FRICTION; mvy *= FRICTION;
+      if (Math.hypot(mvx, mvy) < 0.5) mvx = mvy = 0;
+    }
+    const sx = Math.trunc(accSX), sy = Math.trunc(accSY);
+    if ((sx || sy) && send({ t: 's', dx: sx, dy: sy }, true)) { accSX -= sx; accSY -= sy; }
   }, SEND_MS);
 
   // ---------------------------------------------------------------- touch
-  let startX = 0, startY = 0, moved = 0, maxTouches = 0, lastScrollY = 0;
+  let startX = 0, startY = 0, moved = 0, maxTouches = 0;
+  let lastX = 0, lastY = 0, lastMoveT = 0;              // trackpad: previous finger position
+  let lastSX = 0, lastSY = 0, svx = 0, svy = 0;          // scroll centroid and velocity (px/ms)
+  let swipeX = 0, swipeY = 0, swiped = false;            // three-finger swipe origin
   let lastTap = { t: 0, x: 0, y: 0 };
 
-  const avgY = (ts) => (ts[0].clientY + ts[1].clientY) / 2;
+  // Average position of all fingers on the pad.
+  function centroid(ts) {
+    let x = 0, y = 0;
+    for (const t of ts) { x += t.clientX; y += t.clientY; }
+    return [x / ts.length, y / ts.length];
+  }
 
   pad.addEventListener('touchstart', (e) => {
     e.preventDefault();
-    const ts = e.touches;
+    const ts = e.touches, now = performance.now();
     if (!touching) {  // first finger down: begin a new gesture
-      touching = true; mode = 'move'; guard = true;
-      downT = performance.now();
-      startX = ts[0].clientX; startY = ts[0].clientY;
-      moved = 0; maxTouches = 0;
-      fx = fy = accX = accY = accS = 0;
+      touching = true; mode = 'move'; guard = S.input === 'air'; panning = false; speed = 0;
+      downT = lastMoveT = now;
+      startX = lastX = ts[0].clientX; startY = lastY = ts[0].clientY;
+      moved = 0; maxTouches = 0; swiped = false;
+      fx = fy = accX = accY = mvx = mvy = 0;  // a new touch also stops scroll momentum
+      dragArmed = S.input === 'pad' && now - lastTap.t < DOUBLE_TAP_MS
+        && Math.hypot(startX - lastTap.x, startY - lastTap.y) < DOUBLE_TAP_PX;
       pad.classList.add('active');
     }
     maxTouches = Math.max(maxTouches, ts.length);
-    if (ts.length >= 2) {  // second finger: switch to scrolling, pause pointing
+    if (ts.length >= 3) {  // third finger: desktop swipe, one action per gesture
+      releaseDrag();
+      mode = 'swipe';
+      accX = accY = accSX = accSY = 0;
+      [swipeX, swipeY] = centroid(ts);
+    } else if (ts.length === 2 && mode !== 'swipe') {  // second finger: scroll, pause pointing
+      releaseDrag();
       mode = 'scroll';
-      accX = accY = 0;
-      lastScrollY = avgY(ts);
+      accX = accY = svx = svy = 0;
+      [lastSX, lastSY] = centroid(ts);
+      lastMoveT = now;
     }
   }, { passive: false });
 
   pad.addEventListener('touchmove', (e) => {
     e.preventDefault();
-    const ts = e.touches;
+    const ts = e.touches, now = performance.now();
+    const dt = Math.max(1, now - lastMoveT);
+    lastMoveT = now;
+
+    if (mode === 'swipe') {
+      if (ts.length < 3 || swiped) return;
+      const [x, y] = centroid(ts);
+      const dx = x - swipeX, dy = y - swipeY;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_PX) return;
+      const d = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'l' : 'r') : (dy < 0 ? 'u' : 'd');
+      swiped = send({ t: 'g', d });
+      if (swiped) flash();
+      return;
+    }
+
     if (mode === 'scroll') {
       if (ts.length < 2) return;
-      const y = avgY(ts), d = y - lastScrollY;
-      lastScrollY = y;
-      moved += Math.abs(d);
-      // Finger moves up -> content moves up (like a touchscreen).
-      accS += d * SCROLL_GAIN * (S.invScroll ? -1 : 1);
-    } else {
-      moved = Math.max(moved, Math.hypot(ts[0].clientX - startX, ts[0].clientY - startY));
+      const [x, y] = centroid(ts);
+      const sign = S.invScroll ? -1 : 1;
+      const dx = (x - lastSX) * SCROLL_GAIN * sign, dy = (y - lastSY) * SCROLL_GAIN * sign;
+      lastSX = x; lastSY = y;
+      moved += Math.abs(dx) + Math.abs(dy);
+      // Fingers move up -> content moves up (like a touchscreen / natural scrolling).
+      accSX += dx; accSY += dy;
+      svx = 0.7 * svx + 0.3 * (dx / dt);  // smoothed velocity for momentum
+      svy = 0.7 * svy + 0.3 * (dy / dt);
+      return;
+    }
+
+    const t = ts[0];
+    moved = Math.max(moved, Math.hypot(t.clientX - startX, t.clientY - startY));
+    if (S.input === 'pad') {
+      if (!panning) {
+        // Ignore the first few px (taps wobble slightly), then start pointing from
+        // the current spot so the slop distance never shows up as a cursor jump.
+        if (moved < SLOP_PX) return;
+        panning = true;
+        lastX = t.clientX; lastY = t.clientY;
+        return;
+      }
+      // Relative pointing with acceleration: slow = precise, fast = covers the screen.
+      const dx = t.clientX - lastX, dy = t.clientY - lastY;
+      lastX = t.clientX; lastY = t.clientY;
+      // Smoothed speed with a minimum time step: iOS sometimes delivers two events a
+      // millisecond apart, which would otherwise spike the acceleration.
+      speed = 0.7 * speed + 0.3 * (Math.hypot(dx, dy) / Math.max(dt, 8));
+      const gain = S.padSpeed * (1 + PAD_ACCEL * Math.min(speed, 3));
+      accX += dx * gain;
+      accY += dy * gain;
     }
   }, { passive: false });
 
   function onTouchEnd(e) {
     e.preventDefault();
     if (e.touches.length) {  // some fingers still down
-      if (e.touches.length >= 2) lastScrollY = avgY(e.touches);
+      // Finger count changed: re-anchor so the centroid jump isn't treated as movement.
+      if (e.touches.length >= 3) [swipeX, swipeY] = centroid(e.touches);
+      else if (e.touches.length === 2) [lastSX, lastSY] = centroid(e.touches);
       return;
     }
-    // All fingers lifted: stop sending immediately; the cursor stays where it is.
-    touching = false;
-    accX = accY = accS = 0;
-    pad.classList.remove('active');
+    const still = S.input === 'air' ? guard : !panning;  // no cursor movement happened yet
+    const wasTap = mode === 'move' && still && performance.now() - downT < TAP_MS && moved < TAP_MOVE_PX;
+    const wasTwoFingerTap = mode === 'scroll' && maxTouches === 2
+      && performance.now() - downT < TAP_MS * 1.5 && moved < TAP_MOVE_PX;
+    const flick = mode === 'scroll' && performance.now() - lastMoveT < 80;  // fingers still moving at lift
+
+    // All fingers lifted: stop pointing immediately; the cursor stays where it is.
+    endGesture();
     if (e.type === 'touchcancel') return;
 
-    const dur = performance.now() - downT;
-    if (mode === 'move' && guard && dur < TAP_MS && moved < TAP_MOVE_PX) {
+    if (wasTap) {
       leftTap(startX, startY);
-    } else if (mode === 'scroll' && maxTouches === 2 && dur < TAP_MS * 1.5 && moved < TAP_MOVE_PX) {
+    } else if (wasTwoFingerTap) {
       send({ t: 'c', b: 'r', n: 1 });
       flash();
+    } else if (flick && S.input === 'pad' && S.momentum && Math.hypot(svx, svy) > 0.3) {
+      mvx = svx * SEND_MS; mvy = svy * SEND_MS;  // px/ms -> px per frame
     }
   }
   pad.addEventListener('touchend', onTouchEnd, { passive: false });
   pad.addEventListener('touchcancel', onTouchEnd, { passive: false });
+
+  function releaseDrag() {
+    if (dragging) send({ t: 'd', s: 0 });
+    dragging = dragArmed = false;
+  }
+
+  function endGesture() {
+    touching = false;
+    accX = accY = 0;
+    releaseDrag();
+    pad.classList.remove('active');
+  }
 
   // Send the first click right away; a quick second tap is sent as click #2,
   // which macOS treats as a double click (no delay on single clicks).
@@ -339,48 +497,48 @@
     const err = $('err');
     err.textContent = '';
     if (!window.isSecureContext) {
-      err.textContent = 'Motion sensors require HTTPS. Open the https:// link from the QR code.';
+      err.textContent = 'This page needs HTTPS. Open the https:// link from the QR code.';
       return;
     }
-    // iOS 13+: permission must be requested from a user gesture.
+    // iOS 13+: motion permission must be requested from a user gesture.
+    // Trackpad mode works without it, so a denial only affects Air Mouse.
     if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-      try {
-        if (await DeviceMotionEvent.requestPermission() !== 'granted') {
-          err.textContent = 'Motion access denied. Close Safari completely (swipe it away), reopen this page, tap Start and choose "Allow".';
-          return;
-        }
-      } catch (ex) {
-        err.textContent = 'Could not request motion access: ' + ex.message;
-        return;
-      }
+      try { motionOk = await DeviceMotionEvent.requestPermission() === 'granted'; }
+      catch { motionOk = false; }
     }
-    window.addEventListener('devicemotion', onMotion);
+    if (motionOk) window.addEventListener('devicemotion', onMotion);
     started = true;
     connect();
     keepAwake();
     $('startScreen').classList.add('hidden');
+    setInput(S.input);
     setTimeout(() => {
-      if (!gotMotion) warn('No gyroscope data. Check motion permissions for this site (see README → Troubleshooting).');
+      if (motionOk && !gotMotion && S.input === 'air') {
+        warn('No gyroscope data. Check motion permissions for this site (see README → Troubleshooting).');
+      }
     }, 1500);
   });
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') { if (started) keepAwake(); }
-    else { touching = false; pad.classList.remove('active'); }  // never leave a gesture stuck
+    else endGesture();  // never leave a gesture (or a held button) stuck
   });
 
   // ---------------------------------------------------------------- settings UI
-  const RANGE_FMT = { sens: (v) => v, smooth: (v) => Math.round(v * 100) + '%', dead: (v) => v + '°/s' };
+  const RANGE_FMT = {
+    sens: (v) => v, smooth: (v) => Math.round(v * 100) + '%', dead: (v) => v + '°/s', padSpeed: (v) => v.toFixed(1) + '×',
+  };
+  const FIELDS = ['sens', 'smooth', 'dead', 'invX', 'invY', 'padSpeed', 'momentum', 'invScroll'];
 
   function renderSettings() {
-    for (const k of Object.keys(DEFAULTS)) {
+    for (const k of FIELDS) {
       const el = $(k);
       if (el.type === 'checkbox') el.checked = S[k];
       else { el.value = S[k]; $('v-' + k).textContent = RANGE_FMT[k](S[k]); }
     }
   }
 
-  for (const k of Object.keys(DEFAULTS)) {
+  for (const k of FIELDS) {
     $(k).addEventListener('input', (e) => {
       const el = e.target;
       S[k] = el.type === 'checkbox' ? el.checked : Number(el.value);
@@ -392,7 +550,9 @@
   $('gear').addEventListener('click', () => { renderSettings(); $('sheet').classList.remove('hidden'); });
   $('done').addEventListener('click', () => $('sheet').classList.add('hidden'));
   $('sheet').addEventListener('click', (e) => { if (e.target.id === 'sheet') $('sheet').classList.add('hidden'); });
-  $('reset').addEventListener('click', () => { S = { ...DEFAULTS }; save(); renderSettings(); });
+  $('reset').addEventListener('click', () => { S = { ...DEFAULTS, input: S.input }; save(); renderSettings(); });
+
+  setInput(S.input);  // apply the saved mode (layout) before Start
 })();
 </script>
 </body>
