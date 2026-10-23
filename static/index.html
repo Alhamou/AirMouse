@@ -252,6 +252,8 @@
   let ws = null, retry = 0;
   let target = 'mac';          // 'mac' | 'tv': who the pad controls
   let tvState = { s: 'off', m: 'TV not connected' };
+  // Short enough to fit beside the tabs; the full reason is in the Mac's menu.
+  const TV_LABELS = { off: 'TV off', connecting: 'Connecting…', pairing: 'Accept on TV', connected: 'Connected', error: 'TV offline' };
 
   function connect() {
     ws = new WebSocket(`wss://${location.host}/ws?t=${encodeURIComponent(token)}`);
@@ -284,7 +286,7 @@
   function setStatus(ok) {
     const tv = target === 'tv' && ok;
     $('dot').classList.toggle('ok', tv ? tvState.s === 'connected' : ok);
-    $('statusText').textContent = tv ? tvState.m : ok ? 'Connected' : 'Connecting…';
+    $('statusText').textContent = tv ? TV_LABELS[tvState.s] || tvState.m : ok ? 'Connected' : 'Connecting…';
   }
 
   // ---------------------------------------------------------------- gesture state
