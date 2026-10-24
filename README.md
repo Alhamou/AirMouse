@@ -127,7 +127,7 @@ The first time, Safari asks for microphone access. Recordings are limited to 10 
 
 The 📺 tab turns the pad into a Magic Remote for an LG webOS TV: slide a finger and the TV's own pointer
 appears over whatever is on screen. Tap = OK, two fingers = scroll, two-finger tap = Back. The buttons at
-the bottom are Back, Home, **123** (type a channel number), **Aa** (type into the TV's focused text field,
+the bottom are a joystick (hold and push to move the pointer, tap = OK), Back, Home, **123** (type a channel number), **Aa** (type into the TV's focused text field,
 live; Return sends Enter), power, channel −/+ and volume: press the 🔊
 button and slide left / right to change the volume, or tap it to mute.
 

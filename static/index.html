@@ -105,6 +105,16 @@
   /* Volume: press and slide left / right */
   #keys #vol { width: 130px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; touch-action: none; }
   #vol .arrow { font-size: 15px; color: var(--dim); }
+  /* Joystick: press and push the knob to move the TV pointer; tap = OK */
+  #joy {
+    position: relative; width: 84px; height: 84px; margin-bottom: 2px; border-radius: 50%;
+    background: rgba(42, 42, 53, .8); touch-action: none;
+  }
+  #knob {
+    position: absolute; left: 50%; top: 50%; width: 38px; height: 38px; margin: -19px 0 0 -19px; border-radius: 50%;
+    background: var(--line); box-shadow: 0 2px 8px rgba(0, 0, 0, .35); pointer-events: none;
+  }
+  #joy.on #knob { background: var(--accent); }
 
   /* Channel number pad */
   #numpad { justify-content: flex-end; background: rgba(0, 0, 0, .6); }
@@ -175,9 +185,11 @@
   <p class="tvOnly">Slide one finger to show and move the TV pointer</p>
   <p class="tvOnly">Tap = OK · Two fingers = scroll · Two-finger tap = Back</p>
   <p class="tvOnly">Volume: press 🔊 and slide ‹ › · tap it to mute</p>
+  <p class="tvOnly">Joystick: hold and push to move the pointer · tap = OK</p>
 </div>
 
 <div id="keys" class="hidden">
+  <div id="joy" aria-label="Joystick: press and push to move the pointer, tap for OK"><div id="knob"></div></div>
   <div class="row">
     <button data-key="BACK" aria-label="Back">↩︎</button>
     <button data-key="HOME" aria-label="Home">⌂</button>
@@ -634,6 +646,46 @@
   $('kbdBtn').addEventListener('click', openKeyboard);
   $('kbdDone').addEventListener('click', closeKeyboard);
   $('kbd').addEventListener('click', (e) => { if (e.target.id === 'kbd') closeKeyboard(); });
+
+  // Joystick: the knob follows the finger up to JOY_RADIUS; while held, the pointer keeps moving
+  // in that direction, faster the further the knob is pushed. A tap without pushing is OK.
+  const JOY_RADIUS = 30, JOY_SPEED = 16, JOY_DEAD = 4;  // px, max pointer px per frame, dead zone px
+  const joy = $('joy'), knob = $('knob');
+  let joyStart = null, joyX = 0, joyY = 0, joyPushed = false, joyTimer = 0, joyAccX = 0, joyAccY = 0;
+  function joyPlace(x, y) { knob.style.transform = `translate(${x}px, ${y}px)`; }
+  joy.addEventListener('pointerdown', (e) => {
+    keepAwake();
+    joy.setPointerCapture(e.pointerId);
+    joyStart = [e.clientX, e.clientY]; joyX = joyY = 0; joyPushed = false; joyAccX = joyAccY = 0;
+    joy.classList.add('on');
+    joyTimer = setInterval(() => {
+      const dist = Math.hypot(joyX, joyY);
+      if (dist < JOY_DEAD) return;
+      const gain = JOY_SPEED * Math.pow(Math.min(dist, JOY_RADIUS) / JOY_RADIUS, 1.6) / dist;
+      joyAccX += joyX * gain; joyAccY += joyY * gain;
+      const dx = Math.trunc(joyAccX), dy = Math.trunc(joyAccY);
+      if ((dx || dy) && send({ t: 'm', dx, dy }, true)) { joyAccX -= dx; joyAccY -= dy; }
+    }, SEND_MS);
+  });
+  joy.addEventListener('pointermove', (e) => {
+    if (!joyStart) return;
+    let x = e.clientX - joyStart[0], y = e.clientY - joyStart[1];
+    const dist = Math.hypot(x, y);
+    if (dist > JOY_RADIUS) { x *= JOY_RADIUS / dist; y *= JOY_RADIUS / dist; }
+    if (dist > JOY_DEAD) joyPushed = true;
+    joyX = x; joyY = y;
+    joyPlace(x, y);
+  });
+  const joyEnd = (e) => {
+    if (!joyStart) return;
+    clearInterval(joyTimer);
+    if (e.type === 'pointerup' && !joyPushed) { send({ t: 'c', b: 'l', n: 1 }); tick(); }
+    joyStart = null; joyX = joyY = 0;
+    joyPlace(0, 0);
+    joy.classList.remove('on');
+  };
+  joy.addEventListener('pointerup', joyEnd);
+  joy.addEventListener('pointercancel', joyEnd);
 
   // Channel number pad: type the number, ✓ asks the Mac to tune to it.
   let channel = '';
