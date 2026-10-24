@@ -127,7 +127,8 @@ The first time, Safari asks for microphone access. Recordings are limited to 10 
 
 The 📺 tab turns the pad into a Magic Remote for an LG webOS TV: slide a finger and the TV's own pointer
 appears over whatever is on screen. Tap = OK, two fingers = scroll, two-finger tap = Back. The buttons at
-the bottom are Back, Home, **123** (type a channel number), power, channel −/+ and volume: press the 🔊
+the bottom are Back, Home, **123** (type a channel number), **Aa** (type into the TV's focused text field,
+live; Return sends Enter), power, channel −/+ and volume: press the 🔊
 button and slide left / right to change the volume, or tap it to mute.
 
 Power turns the TV off while it's connected, and otherwise wakes it with Wake-on-LAN. The Mac learns the
@@ -197,7 +198,8 @@ One JSON object per WebSocket text message (phone → Mac):
 
 With `"to":"tv"`, `m`, `c` and `s` drive the LG TV's pointer instead (a right click is the Back key), plus
 `{"t":"b","k":"HOME","to":"tv"}` for a remote key (also `CHANNELUP`, `VOLUMEDOWN`, `MUTE`, digits `0`–`9`),
-`{"t":"p","to":"tv"}` for power (off, or wake from standby), `{"t":"n","n":"25","to":"tv"}` to go to a channel and `{"t":"h","to":"tv"}` when the TV tab opens.
+`{"t":"p","to":"tv"}` for power (off, or wake from standby), `{"t":"n","n":"25","to":"tv"}` to go to a channel, `{"t":"k","s":"abc"}` / `{"t":"k","d":2}` / `{"t":"k","e":1}`
+(with `"to":"tv"`) to type, delete and press Enter in the TV's text field, and `{"t":"h","to":"tv"}` when the TV tab opens.
 The Mac answers with `{"t":"tv","s":"connected","m":"TV connected"}` whenever the TV link changes
 (`s` = `off` | `connecting` | `pairing` | `connected` | `error`).
 

@@ -106,6 +106,29 @@ final class TVController: NSObject, URLSessionDelegate {
         }
     }
 
+    // MARK: Text input (the TV's on-screen keyboard)
+
+    /// Type into the text field that has focus on the TV.
+    func insertText(_ text: String) {
+        guard !text.isEmpty, text.count <= 512 else { return }
+        ime("insertText", ["text": text, "replace": 0])
+    }
+
+    func deleteCharacters(_ count: Int) {
+        guard count > 0 else { return }
+        ime("deleteCharacters", ["count": min(count, 512)])
+    }
+
+    func sendEnter() { ime("sendEnterKey", nil) }
+
+    /// Requests go out in order on one socket, so fast typing arrives in sequence.
+    private func ime(_ method: String, _ payload: [String: Any]?) {
+        queue.async {
+            guard self.state == .connected else { return self.ensureConnected() }
+            self.request(id: "ime", uri: "ssap://com.webos.service.ime/" + method, payload: payload)
+        }
+    }
+
     /// Tune to a channel by its number ("25", "7-1"). Looks it up in the TV's channel list and
     /// opens it directly: typing digits + OK on the pointer socket is unreliable, because while
     /// the pointer is visible OK clicks at the pointer and closes the number entry.

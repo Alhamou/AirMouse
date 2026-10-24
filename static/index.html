@@ -108,6 +108,19 @@
 
   /* Channel number pad */
   #numpad { justify-content: flex-end; background: rgba(0, 0, 0, .6); }
+
+  /* TV keyboard: sits at the top, so the phone keyboard never covers it */
+  #kbd { justify-content: flex-start; background: rgba(0, 0, 0, .6); }
+  #kbd .panel {
+    max-width: 520px; border-radius: 0 0 22px 22px;
+    padding: calc(16px + env(safe-area-inset-top)) 18px 18px;
+  }
+  #kbd .bar { display: flex; gap: 10px; align-items: center; }
+  #kbdInput {
+    flex: 1; min-width: 0; height: 48px; padding: 0 14px; border: 0; border-radius: 14px; outline: none;
+    background: var(--line); color: var(--text); font: inherit; font-size: 18px; -webkit-user-select: text; user-select: text;
+  }
+  #kbd .hint { margin: 10px 2px 0; color: var(--dim); font-size: 13px; }
   #numpad .panel { max-width: 360px; text-align: center; }
   #chDisplay { height: 52px; margin: 0 0 16px; font-size: 38px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: .08em; }
   #chDisplay:empty::before { content: 'Channel'; color: var(--dim); font-size: 18px; font-weight: 400; letter-spacing: 0; }
@@ -169,12 +182,25 @@
     <button data-key="BACK" aria-label="Back">↩︎</button>
     <button data-key="HOME" aria-label="Home">⌂</button>
     <button id="numBtn" class="ch" aria-label="Channel number">123</button>
+    <button id="kbdBtn" class="ch" aria-label="Keyboard">Aa</button>
     <button id="powerBtn" class="power" aria-label="Power">⏻</button>
   </div>
   <div class="row">
     <button data-key="CHANNELDOWN" class="ch" aria-label="Channel down">CH−</button>
     <button id="vol" aria-label="Volume: slide left or right, tap to mute"><span class="arrow">‹</span><span id="volIcon">🔊</span><span class="arrow">›</span></button>
     <button data-key="CHANNELUP" class="ch" aria-label="Channel up">CH+</button>
+  </div>
+</div>
+
+<!-- TV keyboard: typing goes straight into the focused text field on the TV -->
+<div id="kbd" class="overlay hidden">
+  <div class="panel">
+    <div class="bar">
+      <input id="kbdInput" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+             enterkeyhint="go" aria-label="Type on the TV">
+      <button id="kbdDone" class="btn primary">Done</button>
+    </div>
+    <p class="hint">Select a text field on the TV first. Return sends Enter.</p>
   </div>
 </div>
 
@@ -526,7 +552,7 @@
     pad.classList.toggle('hidden', isVoice);
     pad.classList.toggle('tv', name === 'tv');
     $('keys').classList.toggle('hidden', name !== 'tv');
-    if (name !== 'tv') closeNumpad();
+    if (name !== 'tv') { closeNumpad(); closeKeyboard(); }
     voice.classList.toggle('hidden', !isVoice);
     if (!isVoice) { stopRecording(false); releaseMic(); }
     if (target === 'tv') send({ t: 'h' });
@@ -575,6 +601,39 @@
   };
   vol.addEventListener('pointerup', volEnd);
   vol.addEventListener('pointercancel', volEnd);
+
+  // TV keyboard: each edit of the field is sent as the difference from the last one (delete the
+  // changed tail, insert the new text), so typing, backspace and autocomplete all show up live.
+  const kbdInput = $('kbdInput');
+  let typed = '';
+  function openKeyboard() {
+    keepAwake();
+    kbdInput.value = typed = '';
+    $('kbd').classList.remove('hidden');
+    kbdInput.focus();  // inside the tap handler, so iOS shows the keyboard
+  }
+  function closeKeyboard() {
+    kbdInput.blur();
+    $('kbd').classList.add('hidden');
+  }
+  kbdInput.addEventListener('input', () => {
+    const before = Array.from(typed), after = Array.from(kbdInput.value);
+    let same = 0;
+    while (same < before.length && same < after.length && before[same] === after[same]) same++;
+    if (before.length > same) send({ t: 'k', d: before.length - same });
+    if (after.length > same) send({ t: 'k', s: after.slice(same).join('') });
+    typed = kbdInput.value;
+  });
+  kbdInput.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.isComposing) return;
+    e.preventDefault();
+    send({ t: 'k', e: 1 });
+    kbdInput.value = typed = '';  // the TV has the text now; start fresh for the next field
+    tick();
+  });
+  $('kbdBtn').addEventListener('click', openKeyboard);
+  $('kbdDone').addEventListener('click', closeKeyboard);
+  $('kbd').addEventListener('click', (e) => { if (e.target.id === 'kbd') closeKeyboard(); });
 
   // Channel number pad: type the number, ✓ asks the Mac to tune to it.
   let channel = '';
