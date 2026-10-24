@@ -105,16 +105,24 @@
   /* Volume: press and slide left / right */
   #keys #vol { width: 130px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; touch-action: none; }
   #vol .arrow { font-size: 15px; color: var(--dim); }
-  /* Joystick: press and push the knob to move the TV pointer; tap = OK */
-  #joy {
-    position: relative; width: 84px; height: 84px; margin-bottom: 2px; border-radius: 50%;
-    background: rgba(42, 42, 53, .8); touch-action: none;
+  /* Arrow pad, like the remote: ↑ ↓ ← → keys around a wheel (drag = scroll, tap = OK) */
+  #dpad {
+    position: relative; width: 132px; height: 132px; margin-bottom: 2px; border-radius: 50%;
+    background: rgba(42, 42, 53, .8);
   }
-  #knob {
-    position: absolute; left: 50%; top: 50%; width: 38px; height: 38px; margin: -19px 0 0 -19px; border-radius: 50%;
-    background: var(--line); box-shadow: 0 2px 8px rgba(0, 0, 0, .35); pointer-events: none;
+  #dpad .arrow {
+    position: absolute; width: 44px; height: 44px; border-radius: 50%; font-size: 18px; color: var(--dim);
+    background: none; transition: background .1s, color .1s;
   }
-  #joy.on #knob { background: var(--accent); }
+  #dpad .arrow:active, #dpad .arrow.on { background: var(--accent); color: #fff; }
+  #dpad .up { left: 44px; top: 0; } #dpad .down { left: 44px; bottom: 0; }
+  #dpad .left { left: 0; top: 44px; } #dpad .right { right: 0; top: 44px; }
+  #wheel {
+    position: absolute; left: 41px; top: 41px; width: 50px; height: 50px; border-radius: 50%;
+    background: var(--line); touch-action: none; box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
+    background-image: repeating-linear-gradient(0deg, transparent 0 5px, rgba(255, 255, 255, .07) 5px 6px);
+  }
+  #wheel.on { background-color: var(--accent); }
 
   /* Channel number pad */
   #numpad { justify-content: flex-end; background: rgba(0, 0, 0, .6); }
@@ -185,11 +193,17 @@
   <p class="tvOnly">Slide one finger to show and move the TV pointer</p>
   <p class="tvOnly">Tap = OK · Two fingers = scroll · Two-finger tap = Back</p>
   <p class="tvOnly">Volume: press 🔊 and slide ‹ › · tap it to mute</p>
-  <p class="tvOnly">Joystick: hold and push to move the pointer · tap = OK</p>
+  <p class="tvOnly">Arrows = remote keys · Wheel: drag = scroll, tap = OK</p>
 </div>
 
 <div id="keys" class="hidden">
-  <div id="joy" aria-label="Joystick: press and push to move the pointer, tap for OK"><div id="knob"></div></div>
+  <div id="dpad">
+    <button class="arrow up" data-arrow="UP" aria-label="Up">▲</button>
+    <button class="arrow left" data-arrow="LEFT" aria-label="Left">◀</button>
+    <button class="arrow right" data-arrow="RIGHT" aria-label="Right">▶</button>
+    <button class="arrow down" data-arrow="DOWN" aria-label="Down">▼</button>
+    <div id="wheel" aria-label="Wheel: drag up or down to scroll, tap for OK"></div>
+  </div>
   <div class="row">
     <button data-key="BACK" aria-label="Back">↩︎</button>
     <button data-key="HOME" aria-label="Home">⌂</button>
@@ -647,45 +661,49 @@
   $('kbdDone').addEventListener('click', closeKeyboard);
   $('kbd').addEventListener('click', (e) => { if (e.target.id === 'kbd') closeKeyboard(); });
 
-  // Joystick: the knob follows the finger up to JOY_RADIUS; while held, the pointer keeps moving
-  // in that direction, faster the further the knob is pushed. A tap without pushing is OK.
-  const JOY_RADIUS = 30, JOY_SPEED = 16, JOY_DEAD = 4;  // px, max pointer px per frame, dead zone px
-  const joy = $('joy'), knob = $('knob');
-  let joyStart = null, joyX = 0, joyY = 0, joyPushed = false, joyTimer = 0, joyAccX = 0, joyAccY = 0;
-  function joyPlace(x, y) { knob.style.transform = `translate(${x}px, ${y}px)`; }
-  joy.addEventListener('pointerdown', (e) => {
+  // Arrow pad: the remote's ↑ ↓ ← → keys. Holding one repeats it, like the real remote.
+  const REPEAT_DELAY_MS = 400, REPEAT_MS = 120;
+  for (const b of $('dpad').querySelectorAll('[data-arrow]')) {
+    let hold = 0, repeat = 0;
+    const press = () => { send({ t: 'b', k: b.dataset.arrow }); tick(); };
+    const stop = () => { clearTimeout(hold); clearInterval(repeat); b.classList.remove('on'); };
+    b.addEventListener('pointerdown', (e) => {
+      keepAwake();
+      b.setPointerCapture(e.pointerId);
+      b.classList.add('on');
+      press();
+      hold = setTimeout(() => { repeat = setInterval(press, REPEAT_MS); }, REPEAT_DELAY_MS);
+    });
+    b.addEventListener('pointerup', stop);
+    b.addEventListener('pointercancel', stop);
+  }
+
+  // Wheel in the middle, like the Magic Remote's: drag up / down to scroll, tap = OK.
+  const WHEEL_GAIN = 3;  // finger px -> scroll px
+  const wheel = $('wheel');
+  let wheelY = null, wheelMoved = 0;
+  wheel.addEventListener('pointerdown', (e) => {
     keepAwake();
-    joy.setPointerCapture(e.pointerId);
-    joyStart = [e.clientX, e.clientY]; joyX = joyY = 0; joyPushed = false; joyAccX = joyAccY = 0;
-    joy.classList.add('on');
-    joyTimer = setInterval(() => {
-      const dist = Math.hypot(joyX, joyY);
-      if (dist < JOY_DEAD) return;
-      const gain = JOY_SPEED * Math.pow(Math.min(dist, JOY_RADIUS) / JOY_RADIUS, 1.6) / dist;
-      joyAccX += joyX * gain; joyAccY += joyY * gain;
-      const dx = Math.trunc(joyAccX), dy = Math.trunc(joyAccY);
-      if ((dx || dy) && send({ t: 'm', dx, dy }, true)) { joyAccX -= dx; joyAccY -= dy; }
-    }, SEND_MS);
+    wheel.setPointerCapture(e.pointerId);
+    wheelY = e.clientY; wheelMoved = 0;
+    wheel.classList.add('on');
   });
-  joy.addEventListener('pointermove', (e) => {
-    if (!joyStart) return;
-    let x = e.clientX - joyStart[0], y = e.clientY - joyStart[1];
-    const dist = Math.hypot(x, y);
-    if (dist > JOY_RADIUS) { x *= JOY_RADIUS / dist; y *= JOY_RADIUS / dist; }
-    if (dist > JOY_DEAD) joyPushed = true;
-    joyX = x; joyY = y;
-    joyPlace(x, y);
+  wheel.addEventListener('pointermove', (e) => {
+    if (wheelY === null) return;
+    const dy = e.clientY - wheelY;
+    wheelY = e.clientY;
+    wheelMoved += Math.abs(dy);
+    // Finger down = page down, like rolling the wheel toward you (negative dy in the protocol).
+    accSY -= dy * WHEEL_GAIN;  // the send loop batches it like trackpad scrolling
   });
-  const joyEnd = (e) => {
-    if (!joyStart) return;
-    clearInterval(joyTimer);
-    if (e.type === 'pointerup' && !joyPushed) { send({ t: 'c', b: 'l', n: 1 }); tick(); }
-    joyStart = null; joyX = joyY = 0;
-    joyPlace(0, 0);
-    joy.classList.remove('on');
+  const wheelEnd = (e) => {
+    if (wheelY === null) return;
+    if (e.type === 'pointerup' && wheelMoved < TAP_MOVE_PX) { send({ t: 'b', k: 'ENTER' }); tick(); }
+    wheelY = null;
+    wheel.classList.remove('on');
   };
-  joy.addEventListener('pointerup', joyEnd);
-  joy.addEventListener('pointercancel', joyEnd);
+  wheel.addEventListener('pointerup', wheelEnd);
+  wheel.addEventListener('pointercancel', wheelEnd);
 
   // Channel number pad: type the number, ✓ asks the Mac to tune to it.
   let channel = '';
